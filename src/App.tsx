@@ -13,6 +13,7 @@ import PartesList from "./pages/PartesList";
 import PartDetail from "./pages/PartDetail";
 import ConsumoCostes from "./pages/ConsumoCostes";
 import Asistencia from "./pages/Asistencia";
+import DSJCalculator from "./pages/DSJCalculator";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/partes/:id" element={<Protected><PartDetail /></Protected>} />
               <Route path="/costes/consumos" element={<Protected><ConsumoCostes /></Protected>} />
               <Route path="/costes/asistencia" element={<Protected><Asistencia /></Protected>} />
+              <Route path="/dsj" element={<Protected><DSJCalculator /></Protected>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

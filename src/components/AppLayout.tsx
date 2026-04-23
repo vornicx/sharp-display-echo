@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, FileStack, Receipt, Users, LogOut, Globe } from "lucide-react";
+import { LayoutDashboard, FileStack, Receipt, Users, LogOut, Globe, Calculator } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -63,6 +63,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
 
           <SectionLabel>{t("nav.parts")}</SectionLabel>
           <NavItem to="/partes" icon={FileStack} label={t("nav.parts.list")} />
+          <NavItem to="/dsj" icon={Calculator} label="Calculadora DSJ" />
 
           <SectionLabel>{t("nav.costs")}</SectionLabel>
           <NavItem to="/costes/consumos" icon={Receipt} label={t("nav.costs.consumption")} />
