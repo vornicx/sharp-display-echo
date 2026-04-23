@@ -189,8 +189,45 @@ function serve() {
         },
       ];
 
-      // Cálculo determinista server-side de kg_palets_alta (suma columna "Netos")
+      // Cálculo determinista server-side
       let kg_palets_alta_server: number | null = null;
+      let kg_produccion_total_server: number | null = null;
+      let kg_mujeres_server: number | null = null;
+      let kg_podrido_calib_server: number | null = null;
+      let kg_muestra_server: number | null = null;
+
+      const norm = (s: any) =>
+        String(s ?? "")
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+      const toNum = (v: any): number => {
+        if (v == null || v === "") return NaN;
+        if (typeof v === "number") return v;
+        // Español: "1.234,56" → 1234.56
+        const s = String(v).trim().replace(/\s/g, "");
+        if (/,\d+$/.test(s)) {
+          return parseFloat(s.replace(/\./g, "").replace(",", "."));
+        }
+        return parseFloat(s.replace(/,/g, ""));
+      };
+      const findHeader = (rows: any[][], matchers: ((h: string) => boolean)[]) => {
+        // Devuelve {headerIdx, cols:[col per matcher, -1 si no se encuentra]}
+        for (let r = 0; r < Math.min(rows.length, 40); r++) {
+          const row = rows[r] ?? [];
+          const cols = matchers.map(() => -1);
+          for (let c = 0; c < row.length; c++) {
+            const cell = norm(row[c]);
+            if (!cell) continue;
+            matchers.forEach((m, i) => {
+              if (cols[i] === -1 && m(cell)) cols[i] = c;
+            });
+          }
+          if (cols[0] !== -1) return { headerIdx: r, cols };
+        }
+        return { headerIdx: -1, cols: matchers.map(() => -1) };
+      };
 
       for (const f of files) {
         try {
