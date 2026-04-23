@@ -30,6 +30,8 @@ interface Row {
   kg_mujeres_manual: number;
   kg_podrido_calibrador_manual: number;
   kg_reciclado_manual: number;
+  kg_reciclado_malla_z1: number;
+  kg_reciclado_malla_z2: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
   resumen_ia: any;
@@ -53,7 +55,7 @@ const PartesList = () => {
     setLoading(true);
     let query = supabase
       .from("partes_diarios")
-      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_podrido_manual, kg_inventario_final, resumen_ia")
+      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_reciclado_malla_z1, kg_reciclado_malla_z2, kg_podrido_manual, kg_inventario_final, resumen_ia")
       .order("date", { ascending: false });
     if (estadoFilter !== "all") query = query.eq("estado", estadoFilter as any);
     const { data, error } = await query;
@@ -153,9 +155,12 @@ const PartesList = () => {
                   const c = computeCascade({
                     kg_production_total: Number(r.resumen_ia?.kg_produccion_total ?? 0),
                     kg_palets_alta: Number(r.resumen_ia?.kg_palets_alta ?? 0),
-                    kg_mujeres_manual: r.kg_mujeres_manual,
-                    kg_podrido_calibrador_manual: r.kg_podrido_calibrador_manual,
+                    kg_mujeres_manual: Number(r.resumen_ia?.kg_mujeres_server ?? r.kg_mujeres_manual ?? 0),
+                    kg_podrido_calibrador_manual: Number(r.resumen_ia?.kg_podrido_server ?? r.kg_podrido_calibrador_manual ?? 0),
+                    kg_muestra: Number(r.resumen_ia?.kg_muestra_server ?? 0),
                     kg_reciclado_manual: r.kg_reciclado_manual,
+                    kg_reciclado_malla_z1: r.kg_reciclado_malla_z1,
+                    kg_reciclado_malla_z2: r.kg_reciclado_malla_z2,
                     kg_podrido_manual: r.kg_podrido_manual,
                     kg_inventario_final: r.kg_inventario_final,
                   });
