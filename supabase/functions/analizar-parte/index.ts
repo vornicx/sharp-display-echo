@@ -538,6 +538,7 @@ function serve() {
         kg_podrido_calibrador,
         kg_muestra,
         analisis: parsed.analisis ?? "",
+        sources,
       };
 
       // Auto-rellenamos los campos del calibrador (vienen del archivo, no son "manuales" reales).
