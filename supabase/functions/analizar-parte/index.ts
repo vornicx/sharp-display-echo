@@ -219,9 +219,26 @@ function serve() {
               image_url: { url: `data:${f.mime_type};base64,${b64}` },
             });
           } else {
+            // Fetch file and embed as base64 so the model can actually read it.
+            const resp = await fetch(signed.signedUrl);
+            const buf = new Uint8Array(await resp.arrayBuffer());
+            let binary = "";
+            const CHUNK = 0x8000;
+            for (let i = 0; i < buf.length; i += CHUNK) {
+              binary += String.fromCharCode.apply(
+                null,
+                buf.subarray(i, i + CHUNK) as unknown as number[],
+              );
+            }
+            const b64 = btoa(binary);
+            const mime = f.mime_type ?? "application/octet-stream";
             content.push({
               type: "text",
-              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}, mime: ${f.mime_type ?? "?"}). URL temporal: ${signed.signedUrl} ---`,
+              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}, mime: ${mime}) ---`,
+            });
+            content.push({
+              type: "file",
+              file: { filename: f.file_name, file_data: `data:${mime};base64,${b64}` },
             });
           }
         } catch (e) {
@@ -229,21 +246,34 @@ function serve() {
         }
       }
 
-      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [
-            { role: "system", content: sysPrompt },
-            { role: "user", content },
-          ],
-          response_format: { type: "json_object" },
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 130_000);
+      let aiResp: Response;
+      try {
+        aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              { role: "system", content: sysPrompt },
+              { role: "user", content },
+            ],
+            response_format: { type: "json_object" },
+          }),
+          signal: controller.signal,
+        });
+      } catch (e: any) {
+        clearTimeout(timeoutId);
+        if (e?.name === "AbortError") {
+          return j({ success: false, error: "La IA tardó demasiado (>130s). Prueba con menos archivos o reintenta." }, 504);
+        }
+        throw e;
+      }
+      clearTimeout(timeoutId);
 
       if (aiResp.status === 429) return j({ success: false, error: "Rate limit. Intenta en unos minutos." }, 429);
       if (aiResp.status === 402) return j({ success: false, error: "Créditos de Lovable AI agotados." }, 402);
