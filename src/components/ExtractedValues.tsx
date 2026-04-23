@@ -19,6 +19,7 @@ interface Row {
 interface Props {
   resumenIa: any;
   manual: {
+    kg_mujeres_manual: number;
     kg_reciclado_manual: number;
     kg_reciclado_malla_z1: number;
     kg_reciclado_malla_z2: number;
@@ -31,12 +32,33 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
   const r = resumenIa ?? {};
   const s = (r.sources ?? {}) as Record<string, Source | null>;
 
+  // Mujeres (L) — preferir el valor extraído de IA si existe, si no el manual
+  const mujeresLExtracted = r.kg_mujeres_l ?? r.kg_mujeres_calibrador ?? null;
+  const mujeresLValue = mujeresLExtracted != null
+    ? Number(mujeresLExtracted)
+    : Number(manual.kg_mujeres_manual ?? 0);
+  const mujeresLOrigin: "extracted" | "manual" = mujeresLExtracted != null ? "extracted" : "manual";
+  const mujeresLSource = s.kg_mujeres_l ?? s.kg_mujeres_calibrador ?? null;
+
   const rows: Row[] = [
     {
       label: "Producción total",
       value: Number(r.kg_produccion_total ?? 0),
       origin: "extracted",
       source: s.kg_produccion_total,
+    },
+    {
+      label: "Industria / Cítricos manual (+)",
+      value: manual.kg_reciclado_manual,
+      origin: "manual",
+      hint: "Se SUMA a producción. Introducido en la pestaña Manual",
+    },
+    {
+      label: "Mujeres (L)",
+      value: mujeresLValue,
+      origin: mujeresLOrigin,
+      source: mujeresLSource,
+      hint: "Clase L del informe de tamaños — dato duplicado, se resta",
     },
     {
       label: "Palets dados de alta",
@@ -51,28 +73,10 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
       hint: "Introducido en la pestaña Manual",
     },
     {
-      label: "Mujeres precalibrador",
-      value: Number(r.kg_mujeres_calibrador ?? 0),
-      origin: "extracted",
-      source: s.kg_mujeres_calibrador,
-    },
-    {
       label: "Podrido calibrador",
       value: Number(r.kg_podrido_calibrador ?? 0),
       origin: "extracted",
       source: s.kg_podrido_calibrador,
-    },
-    {
-      label: "Muestra",
-      value: Number(r.kg_muestra ?? 0),
-      origin: "extracted",
-      source: s.kg_muestra,
-    },
-    {
-      label: "Reciclado manual",
-      value: manual.kg_reciclado_manual,
-      origin: "manual",
-      hint: "Introducido en la pestaña Manual",
     },
     {
       label: "Reciclado malla Z1",
