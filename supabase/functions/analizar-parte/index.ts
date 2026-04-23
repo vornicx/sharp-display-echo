@@ -219,9 +219,26 @@ function serve() {
               image_url: { url: `data:${f.mime_type};base64,${b64}` },
             });
           } else {
+            // Fetch file and embed as base64 so the model can actually read it.
+            const resp = await fetch(signed.signedUrl);
+            const buf = new Uint8Array(await resp.arrayBuffer());
+            let binary = "";
+            const CHUNK = 0x8000;
+            for (let i = 0; i < buf.length; i += CHUNK) {
+              binary += String.fromCharCode.apply(
+                null,
+                buf.subarray(i, i + CHUNK) as unknown as number[],
+              );
+            }
+            const b64 = btoa(binary);
+            const mime = f.mime_type ?? "application/octet-stream";
             content.push({
               type: "text",
-              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}, mime: ${f.mime_type ?? "?"}). URL temporal: ${signed.signedUrl} ---`,
+              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}, mime: ${mime}) ---`,
+            });
+            content.push({
+              type: "file",
+              file: { filename: f.file_name, file_data: `data:${mime};base64,${b64}` },
             });
           }
         } catch (e) {
