@@ -404,6 +404,11 @@ function serve() {
                   const total = totalsRow > 0 ? totalsRow : sumDetail;
                   if (total > 0) {
                     kg_produccion_total_server = total;
+                    sources.kg_produccion_total = {
+                      file: f.file_name,
+                      sheet: sheetName,
+                      note: totalsRow > 0 ? 'fila TOTALES · columna Peso (kg)' : "suma de filas de detalle · columna Peso (kg)",
+                    };
                     console.log(`[produccion] total=${total.toFixed(2)} (detail=${sumDetail.toFixed(2)}, totalsRow=${totalsRow.toFixed(2)}) from ${f.file_name}`);
                   }
                 }
