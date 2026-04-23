@@ -42,26 +42,52 @@ A) ARCHIVO "Informe_produccion.xlsx" (resumen del calibrador Spectrim)
    → Si solo hay una fila de detalle, ese es el total. Si hay varias, NO las sumes — usa la fila resumen.
 
 B) ARCHIVO "Informe_producto.xlsx" (desglose por producto)
-   Columnas típicas: "Producto", "Empaques", "Peso(kg)" (o "Peso (kg)"), a veces "Fruta".
-   ⚠️ USA SIEMPRE LA COLUMNA "Peso(kg)" — NUNCA "Empaques" ni "Fruta". Equivocarse de columna
-       da valores 20× más grandes que los reales.
+   ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE QUE DEBES EVITAR ⚠️⚠️⚠️
+   El archivo tiene MUCHAS columnas, en este orden aproximado:
+     Producto | Empaque | Empaques | [columna vacía] | Peso(kg) | [columna vacía] | Fruta | Peso de Empaque Promedio | Conteo de Empaques Promedio
+   La columna **Peso(kg)** es la 4ª-5ª columna de datos (después del nombre del producto), NO la última.
+   La columna **Fruta** es el NÚMERO DE PIEZAS (frutos individuales), NO kilos.
+   La columna **Empaques** es el NÚMERO DE CAJAS, NO kilos.
+
+   ❌ NUNCA leas la columna "Fruta" como si fueran kg.
+   ❌ NUNCA leas la columna "Empaques" como si fueran kg.
+   ❌ NUNCA leas la columna "Empaque" (singular) como si fueran kg.
+   ✅ SIEMPRE usa la columna cuyo header es exactamente "Peso(kg)" o "Peso (kg)".
+
+   Identifica la columna correcta por su HEADER EXACTO ("Peso(kg)"), NUNCA por posición.
+   Si el archivo está como imagen (PDF/JPG), localiza visualmente la columna "Peso(kg)" antes de leer datos.
+
    Reglas:
      • "kg_mujeres_calibrador" = SUMA de la columna **Peso(kg)** de TODAS las filas cuyo "Producto"
-       CONTIENE la cadena "PREC" (case-insensitive). Puede haber varias filas: PREC NAVELINA,
-       PREC LANE, PREC SALUSTIANA, etc. Súmalas TODAS. Resultado típico: pocos miles de kg
-       (ej: 2.195 kg). Si te sale >20.000 kg estás sumando la columna equivocada — REVISA.
-     • "kg_podrido_calibrador" = **Peso(kg)** de la fila cuyo "Producto" sea "PODRIDO".
-       Si no existe, 0.
-     • "kg_muestra" = **Peso(kg)** de la fila cuyo "Producto" sea "MUESTRA". Si no existe, 0.
+       CONTIENE la cadena "PREC" (case-insensitive, cualquier variante: PREC-1, PREC-2, PREC NAVELINA,
+       PREC LANE, PREC SALUSTIANA, etc.). Súmalas TODAS. Resultado típico: ~2.000-3.000 kg.
+     • "kg_podrido_calibrador" = **Peso(kg)** de la fila cuyo "Producto" sea "PODRIDO" (exacto, case-insensitive).
+       Resultado típico: ~1.000 kg. Si te sale ~3.500 kg has leído la columna "Fruta" — REVISA.
+     • "kg_muestra" = **Peso(kg)** de la fila cuyo "Producto" CONTIENE "MUESTRA".
+       Resultado típico: ~150 kg. Si te sale ~450 kg has leído la columna "Fruta" — REVISA.
      • "produccion" = lista con TODAS las filas reales de producto (excluye totales). Cada fila:
-       {product, size_range (calibre/tamaño si hay), kg_produced (=Peso(kg)), destination}.
+       {product, size_range (calibre/tamaño si hay), kg_produced (=Peso(kg) de esa fila), destination}.
+
+   VALIDACIÓN OBLIGATORIA: la suma de TODOS los Peso(kg) del informe_producto debe ser
+   aproximadamente igual a kg_produccion_total (diferencia < 1 kg, es redondeo).
+   Si no cuadra, te has equivocado de columna — REVÍSALO antes de devolver el JSON.
 
 C) ARCHIVO DE PALETS (xlsx cuyo NOMBRE contiene "palet" o "palets" — IGNORA su file_type)
-   Columnas típicas: TipoPalet, NºPalet, Denominación Producto, Lote, DcmtoVta, Cliente,
-   Cajas, TipoCaja, Netos, Fact., Sit.
+   ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE ⚠️⚠️⚠️
+   Columnas en este orden aproximado:
+     TipoPalet | NºPalet | Fecha | Denominación Producto | Lote | DcmtoVta | Fecha (albarán) | Cliente | Cajas | TipoCaja | Netos | Fact. | Sit
+   La columna correcta es **Netos** (peso neto en kg de cada palet, valores típicos 600-900 kg por fila).
+   ❌ NUNCA sumes "Cajas" (es número de cajas, valores 50-80 por fila, sumaría miles bajos).
+   ❌ NUNCA sumes "Fact." (es importe en euros).
+   ❌ NUNCA sumes "NºPalet" (es identificador).
+   ✅ SIEMPRE usa la columna cuyo header es exactamente "Netos".
+
    → "kg_palets_alta" = SUMA de la columna "Netos" de TODAS las filas con Netos > 0.
    → NO filtres por TipoPalet ni por Sit. Suma TODOS los palets con Netos positivo.
+   → Ignora filas con Netos ≤ 0 (errores de datos).
    → NO uses el archivo GSTOCK para esto.
+   → Resultado típico de un día normal: 80.000 - 120.000 kg.
+     Si te sale <20.000 kg has sumado la columna equivocada (Cajas/Fact./NºPalet) — REVISA.
 
 D) ARCHIVO GSTOCK (planificación, solo si su nombre NO contiene "palet")
    → "gstock" = lista {product, size_range, kg_expected}. Es solo informativo.
@@ -89,7 +115,13 @@ REGLAS FINALES:
 - NO inventes valores. NO calcules medias.
 - Mantén los decimales tal cual aparecen en los archivos.
 - Las cantidades manuales (reciclado manual, malla Z1, malla Z2, podrido manual, inventario final)
-  NUNCA las extraigas: las introduce el operario. NO las incluyas en el JSON.`;
+  NUNCA las extraigas: las introduce el operario. NO las incluyas en el JSON.
+- ANTES de devolver el JSON, VERIFICA mentalmente:
+    · ¿He usado la columna "Peso(kg)" en el informe_producto (no "Fruta" ni "Empaques")?
+    · ¿He usado la columna "Netos" en el archivo de palets (no "Cajas" ni "Fact.")?
+    · ¿La suma de Peso(kg) del informe_producto ≈ kg_produccion_total?
+    · ¿kg_palets_alta está en el rango 50.000-150.000 (no en miles bajos)?
+  Si alguna respuesta es NO, CORRIGE antes de responder.`;
 
 interface FileMeta { id: string; file_name: string; file_path: string; file_type: string; mime_type: string | null }
 
@@ -167,7 +199,17 @@ function serve() {
           if (isImage) {
             const resp = await fetch(signed.signedUrl);
             const buf = new Uint8Array(await resp.arrayBuffer());
-            const b64 = btoa(String.fromCharCode(...buf));
+            // Encode in chunks to avoid "Maximum call stack size exceeded"
+            // when using btoa(String.fromCharCode(...buf)) on large images.
+            let binary = "";
+            const CHUNK = 0x8000; // 32KB
+            for (let i = 0; i < buf.length; i += CHUNK) {
+              binary += String.fromCharCode.apply(
+                null,
+                buf.subarray(i, i + CHUNK) as unknown as number[],
+              );
+            }
+            const b64 = btoa(binary);
             content.push({
               type: "text",
               text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}) ---`,
