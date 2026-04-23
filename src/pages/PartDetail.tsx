@@ -241,6 +241,35 @@ const PartDetail = () => {
         </Card>
       )}
 
+      <Card className="p-5 shadow-card">
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Valores extraídos</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Origen de cada valor usado en la cascada (archivo · hoja · columna)
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-sm bg-primary/60" /> Extraído del archivo
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-sm bg-muted-foreground/40" /> Entrada manual
+            </span>
+          </div>
+        </div>
+        <ExtractedValues
+          resumenIa={parte.resumen_ia}
+          manual={{
+            kg_reciclado_manual: parte.kg_reciclado_manual,
+            kg_reciclado_malla_z1: parte.kg_reciclado_malla_z1,
+            kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,
+            kg_podrido_manual: parte.kg_podrido_manual,
+            kg_inventario_final: parte.kg_inventario_final,
+          }}
+        />
+      </Card>
+
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="info">{t("part.tab.info")}</TabsTrigger>
