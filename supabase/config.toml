@@ -1,1 +1,4 @@
 project_id = "vofmqtvferdsxtypdvff"
+
+[functions.analizar-parte]
+verify_jwt = false
