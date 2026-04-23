@@ -189,6 +189,9 @@ function serve() {
         },
       ];
 
+      // Cálculo determinista server-side de kg_palets_alta (suma columna "Netos")
+      let kg_palets_alta_server: number | null = null;
+
       for (const f of files) {
         try {
           const { data: signed } = await admin.storage
