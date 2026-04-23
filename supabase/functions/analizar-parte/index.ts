@@ -202,9 +202,11 @@ function serve() {
         kg_produccion_total: null,
         kg_palets_alta: null,
         kg_mujeres_calibrador: null,
+        kg_mujeres_l: null,
         kg_podrido_calibrador: null,
         kg_muestra: null,
       };
+      let kg_mujeres_l_server: number | null = null;
 
       const norm = (s: any) =>
         String(s ?? "")
@@ -380,6 +382,87 @@ function serve() {
               }
             }
 
+            // --------- INFORME DE TAMAÑOS / "(L) Mujeres": kg_mujeres_l ---------
+            // Busca en CUALQUIER xlsx una sección titulada "(L) Mujeres" / "Grupo de MUJERES",
+            // localiza la tabla con headers Tamaño|Piezas|Peso(kg) y suma la columna Peso(kg).
+            if (wb) {
+              try {
+                for (const sheetName of wb.SheetNames) {
+                  if (kg_mujeres_l_server !== null) break;
+                  const ws = wb.Sheets[sheetName];
+                  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
+                  // Localiza la fila marcador de la sección Mujeres (L)
+                  let markerRow = -1;
+                  for (let r = 0; r < rows.length; r++) {
+                    const joined = norm((rows[r] ?? []).join(" "));
+                    if (!joined) continue;
+                    // "(l) mujeres"  o  "grupo de mujeres"
+                    if (/\(l\)\s*mujeres/.test(joined) || /grupo\s+de\s+mujeres/.test(joined)) {
+                      markerRow = r;
+                      break;
+                    }
+                  }
+                  if (markerRow < 0) continue;
+
+                  // A partir del marcador, busca los headers Tamaño / Peso(kg)
+                  let headerIdx = -1;
+                  let tamCol = -1;
+                  let pesoCol = -1;
+                  for (let r = markerRow; r < Math.min(rows.length, markerRow + 15); r++) {
+                    const row = rows[r] ?? [];
+                    let tc = -1, pc = -1;
+                    for (let c = 0; c < row.length; c++) {
+                      const cell = norm(row[c]);
+                      if (tc === -1 && (cell === "tamano" || cell === "tamaño" || cell === "calibre" || cell === "clase")) tc = c;
+                      if (pc === -1 && (cell === "peso(kg)" || cell === "peso (kg)" || cell === "peso kg")) pc = c;
+                    }
+                    if (tc !== -1 && pc !== -1) { headerIdx = r; tamCol = tc; pesoCol = pc; break; }
+                  }
+                  if (headerIdx < 0) continue;
+
+                  // Suma la columna Peso(kg) hasta encontrar fila vacía o nueva sección.
+                  // También captura el total impreso si aparece.
+                  let sum = 0;
+                  let count = 0;
+                  let printedTotal = 0;
+                  for (let r = headerIdx + 1; r < rows.length; r++) {
+                    const row = rows[r] ?? [];
+                    const isAllEmpty = row.every((x) => x == null || String(x).trim() === "");
+                    if (isAllEmpty) break;
+                    const tamCell = String(row[tamCol] ?? "").trim();
+                    const joinedRow = norm(row.join(" "));
+                    // si encontramos otro grupo (e.g. "(M) ...", "Grupo de ..."), paramos
+                    if (/^\([a-z]\)\s/.test(norm(tamCell)) && !/mujeres/.test(joinedRow) && r > headerIdx + 1) break;
+                    if (/grupo\s+de\s+/.test(joinedRow) && !/mujeres/.test(joinedRow)) break;
+                    const kg = toNum(row[pesoCol]);
+                    if (!isFinite(kg)) continue;
+                    // detectar fila de totales (sin tamaño o con "total")
+                    const isTotalRow = /\btotal(es)?\b/i.test(tamCell) || (!tamCell && kg > 0);
+                    if (isTotalRow) {
+                      printedTotal = kg;
+                      break;
+                    }
+                    if (kg > 0) { sum += kg; count += 1; }
+                  }
+                  const finalVal = printedTotal > 0 ? printedTotal : sum;
+                  if (finalVal > 0) {
+                    kg_mujeres_l_server = finalVal;
+                    sources.kg_mujeres_l = {
+                      file: f.file_name,
+                      sheet: sheetName,
+                      note: printedTotal > 0
+                        ? 'sección "(L) Mujeres" · fila TOTALES · columna Peso (kg)'
+                        : `sección "(L) Mujeres" · suma de ${count} tamaños · columna Peso (kg)`,
+                    };
+                    console.log(`[mujeres_L] ${f.file_name} "${sheetName}": kg_mujeres_l=${finalVal.toFixed(2)} (printed=${printedTotal}, sum=${sum.toFixed(2)})`);
+                    break;
+                  }
+                }
+              } catch (err) {
+                console.error("mujeres(L) parse error", err);
+              }
+            }
+
             // --------- INFORME_PRODUCCION: kg_produccion_total ---------
             if (wb && /producci[oó]n/i.test(f.file_name) && !/producto/i.test(f.file_name)) {
               try {
@@ -530,11 +613,15 @@ function serve() {
       const kg_palets_alta = round2(
         kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
       );
+      const kg_mujeres_l = round2(
+        kg_mujeres_l_server !== null ? kg_mujeres_l_server : (Number(parsed.kg_mujeres_l) || 0)
+      );
 
       const resumen_ia = {
         kg_produccion_total,
         kg_palets_alta,
         kg_mujeres_calibrador,
+        kg_mujeres_l,
         kg_podrido_calibrador,
         kg_muestra,
         analisis: parsed.analisis ?? "",
@@ -542,9 +629,10 @@ function serve() {
       };
 
       // Auto-rellenamos los campos del calibrador (vienen del archivo, no son "manuales" reales).
+      // kg_mujeres_manual = Mujeres (L) del informe de tamaños (es lo que se RESTA en la cascada).
       const updates: Record<string, any> = {
         resumen_ia,
-        kg_mujeres_manual: kg_mujeres_calibrador,
+        kg_mujeres_manual: kg_mujeres_l > 0 ? kg_mujeres_l : kg_mujeres_calibrador,
         kg_podrido_calibrador_manual: kg_podrido_calibrador,
         estado: "Analizado",
       };
