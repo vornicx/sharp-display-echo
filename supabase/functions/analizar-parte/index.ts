@@ -613,11 +613,15 @@ function serve() {
       const kg_palets_alta = round2(
         kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
       );
+      const kg_mujeres_l = round2(
+        kg_mujeres_l_server !== null ? kg_mujeres_l_server : (Number(parsed.kg_mujeres_l) || 0)
+      );
 
       const resumen_ia = {
         kg_produccion_total,
         kg_palets_alta,
         kg_mujeres_calibrador,
+        kg_mujeres_l,
         kg_podrido_calibrador,
         kg_muestra,
         analisis: parsed.analisis ?? "",
@@ -625,9 +629,10 @@ function serve() {
       };
 
       // Auto-rellenamos los campos del calibrador (vienen del archivo, no son "manuales" reales).
+      // kg_mujeres_manual = Mujeres (L) del informe de tamaños (es lo que se RESTA en la cascada).
       const updates: Record<string, any> = {
         resumen_ia,
-        kg_mujeres_manual: kg_mujeres_calibrador,
+        kg_mujeres_manual: kg_mujeres_l > 0 ? kg_mujeres_l : kg_mujeres_calibrador,
         kg_podrido_calibrador_manual: kg_podrido_calibrador,
         estado: "Analizado",
       };
