@@ -189,8 +189,45 @@ function serve() {
         },
       ];
 
-      // Cálculo determinista server-side de kg_palets_alta (suma columna "Netos")
+      // Cálculo determinista server-side
       let kg_palets_alta_server: number | null = null;
+      let kg_produccion_total_server: number | null = null;
+      let kg_mujeres_server: number | null = null;
+      let kg_podrido_calib_server: number | null = null;
+      let kg_muestra_server: number | null = null;
+
+      const norm = (s: any) =>
+        String(s ?? "")
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+      const toNum = (v: any): number => {
+        if (v == null || v === "") return NaN;
+        if (typeof v === "number") return v;
+        // Español: "1.234,56" → 1234.56
+        const s = String(v).trim().replace(/\s/g, "");
+        if (/,\d+$/.test(s)) {
+          return parseFloat(s.replace(/\./g, "").replace(",", "."));
+        }
+        return parseFloat(s.replace(/,/g, ""));
+      };
+      const findHeader = (rows: any[][], matchers: ((h: string) => boolean)[]) => {
+        // Devuelve {headerIdx, cols:[col per matcher, -1 si no se encuentra]}
+        for (let r = 0; r < Math.min(rows.length, 40); r++) {
+          const row = rows[r] ?? [];
+          const cols = matchers.map(() => -1);
+          for (let c = 0; c < row.length; c++) {
+            const cell = norm(row[c]);
+            if (!cell) continue;
+            matchers.forEach((m, i) => {
+              if (cols[i] === -1 && m(cell)) cols[i] = c;
+            });
+          }
+          if (cols[0] !== -1) return { headerIdx: r, cols };
+        }
+        return { headerIdx: -1, cols: matchers.map(() => -1) };
+      };
 
       for (const f of files) {
         try {
@@ -240,42 +277,124 @@ function serve() {
               sheetsText = `[No se pudo parsear ${f.file_name}]`;
             }
 
-            // Si es el archivo de palets, calcular deterministicamente la suma de "Netos"
+            // --------- PALETS: suma determinista de "Netos" ---------
             if (wb && /palet/i.test(f.file_name)) {
               try {
-                let total = 0;
+                let best: { total: number; count: number; col: number; sheet: string } | null = null;
                 for (const sheetName of wb.SheetNames) {
                   const ws = wb.Sheets[sheetName];
                   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
-                  // Buscar fila de cabecera que contenga "Netos"
                   let headerIdx = -1;
-                  let netosCol = -1;
-                  for (let r = 0; r < Math.min(rows.length, 30); r++) {
+                  let netosCols: number[] = [];
+                  let nPaletCol = -1;
+                  for (let r = 0; r < Math.min(rows.length, 40); r++) {
                     const row = rows[r] ?? [];
+                    const cols: number[] = [];
+                    let np = -1;
                     for (let c = 0; c < row.length; c++) {
-                      const cell = String(row[c] ?? "").trim().toLowerCase();
-                      if (cell === "netos" || cell === "neto" || cell === "kg netos" || cell === "peso neto") {
-                        headerIdx = r;
-                        netosCol = c;
-                        break;
-                      }
+                      const cell = norm(row[c]);
+                      if (cell === "netos" || cell === "neto" || cell === "kg netos" || cell === "peso neto") cols.push(c);
+                      if (np === -1 && (cell === "nºpalet" || cell === "n°palet" || cell === "no palet" || cell === "npalet" || cell === "num palet" || cell === "numero palet" || cell === "no.palet" || cell === "nº palet")) np = c;
                     }
-                    if (headerIdx >= 0) break;
+                    if (cols.length > 0) {
+                      headerIdx = r;
+                      netosCols = cols;
+                      nPaletCol = np;
+                      break;
+                    }
                   }
-                  if (headerIdx >= 0 && netosCol >= 0) {
+                  if (headerIdx < 0 || netosCols.length === 0) continue;
+                  for (const col of netosCols) {
+                    let total = 0;
+                    let count = 0;
                     for (let r = headerIdx + 1; r < rows.length; r++) {
-                      const v = rows[r]?.[netosCol];
-                      const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/\./g, "").replace(",", "."));
-                      if (isFinite(n) && n > 0) total += n;
+                      const row = rows[r] ?? [];
+                      if (row.every((x) => x == null || String(x).trim() === "")) continue;
+                      const isTotalRow = row.some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
+                      if (isTotalRow) continue;
+                      if (nPaletCol >= 0) {
+                        const npv = row[nPaletCol];
+                        if (npv == null || String(npv).trim() === "") continue;
+                      }
+                      const n = toNum(row[col]);
+                      if (isFinite(n) && n > 0) { total += n; count += 1; }
                     }
+                    if (!best || count > best.count) best = { total, count, col, sheet: sheetName };
                   }
                 }
-                if (total > 0) {
-                  kg_palets_alta_server = total;
-                  console.log(`[palets] Netos sum (server) = ${total.toFixed(2)} kg from ${f.file_name}`);
+                if (best && best.total > 0) {
+                  kg_palets_alta_server = best.total;
+                  console.log(`[palets] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
                 }
               } catch (err) {
                 console.error("palets Netos sum error", err);
+              }
+            }
+
+            // --------- INFORME_PRODUCTO: mujeres(PREC*), podrido, muestra ---------
+            if (wb && /producto/i.test(f.file_name)) {
+              try {
+                for (const sheetName of wb.SheetNames) {
+                  const ws = wb.Sheets[sheetName];
+                  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
+                  const { headerIdx, cols } = findHeader(rows, [
+                    (h) => h === "producto",
+                    (h) => h === "peso(kg)" || h === "peso (kg)" || h === "peso kg" || h === "peso",
+                  ]);
+                  if (headerIdx < 0 || cols[0] < 0 || cols[1] < 0) continue;
+                  const prodCol = cols[0];
+                  const pesoCol = cols[1];
+                  let mujeres = 0, podrido = 0, muestra = 0;
+                  for (let r = headerIdx + 1; r < rows.length; r++) {
+                    const row = rows[r] ?? [];
+                    const prod = norm(row[prodCol]);
+                    if (!prod) continue;
+                    if (/\btotal(es)?\b/.test(prod)) continue;
+                    const kg = toNum(row[pesoCol]);
+                    if (!isFinite(kg)) continue;
+                    if (prod.includes("prec")) mujeres += kg;
+                    if (prod === "podrido") podrido += kg;
+                    if (prod.includes("muestra")) muestra += kg;
+                  }
+                  kg_mujeres_server = (kg_mujeres_server ?? 0) + mujeres;
+                  kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
+                  kg_muestra_server = (kg_muestra_server ?? 0) + muestra;
+                  console.log(`[producto] ${f.file_name} "${sheetName}": mujeres(PREC)=${mujeres.toFixed(2)} podrido=${podrido.toFixed(2)} muestra=${muestra.toFixed(2)}`);
+                }
+              } catch (err) {
+                console.error("producto parse error", err);
+              }
+            }
+
+            // --------- INFORME_PRODUCCION: kg_produccion_total ---------
+            if (wb && /producci[oó]n/i.test(f.file_name) && !/producto/i.test(f.file_name)) {
+              try {
+                for (const sheetName of wb.SheetNames) {
+                  const ws = wb.Sheets[sheetName];
+                  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
+                  const { headerIdx, cols } = findHeader(rows, [
+                    (h) => h === "peso (kg)" || h === "peso(kg)" || h === "peso kg",
+                  ]);
+                  if (headerIdx < 0 || cols[0] < 0) continue;
+                  const pesoCol = cols[0];
+                  let sumDetail = 0;
+                  let totalsRow = 0;
+                  for (let r = headerIdx + 1; r < rows.length; r++) {
+                    const row = rows[r] ?? [];
+                    const kg = toNum(row[pesoCol]);
+                    if (!isFinite(kg) || kg <= 0) continue;
+                    const isTotalRow = row.some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
+                    if (isTotalRow) { totalsRow = kg; continue; }
+                    sumDetail += kg;
+                  }
+                  const total = totalsRow > 0 ? totalsRow : sumDetail;
+                  if (total > 0) {
+                    kg_produccion_total_server = total;
+                    console.log(`[produccion] total=${total.toFixed(2)} (detail=${sumDetail.toFixed(2)}, totalsRow=${totalsRow.toFixed(2)}) from ${f.file_name}`);
+                  }
+                }
+              } catch (err) {
+                console.error("produccion parse error", err);
               }
             }
 
@@ -376,12 +495,19 @@ function serve() {
         }));
       if (lotesRows.length) await admin.from("lotes_dia").insert(lotesRows);
 
-      // ---- Valores autoritativos extraídos por la IA ----
-      const kg_produccion_total = round2(Number(parsed.kg_produccion_total) || 0);
-      const kg_mujeres_calibrador = round2(Number(parsed.kg_mujeres_calibrador) || 0);
-      const kg_podrido_calibrador = round2(Number(parsed.kg_podrido_calibrador) || 0);
-      const kg_muestra = round2(Number(parsed.kg_muestra) || 0);
-      // kg_palets_alta: preferimos el cálculo server-side (suma "Netos") si está disponible
+      // ---- Valores autoritativos: preferimos cálculo server-side, fallback a IA ----
+      const kg_produccion_total = round2(
+        kg_produccion_total_server !== null ? kg_produccion_total_server : (Number(parsed.kg_produccion_total) || 0)
+      );
+      const kg_mujeres_calibrador = round2(
+        kg_mujeres_server !== null ? kg_mujeres_server : (Number(parsed.kg_mujeres_calibrador) || 0)
+      );
+      const kg_podrido_calibrador = round2(
+        kg_podrido_calib_server !== null ? kg_podrido_calib_server : (Number(parsed.kg_podrido_calibrador) || 0)
+      );
+      const kg_muestra = round2(
+        kg_muestra_server !== null ? kg_muestra_server : (Number(parsed.kg_muestra) || 0)
+      );
       const kg_palets_alta = round2(
         kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
       );
