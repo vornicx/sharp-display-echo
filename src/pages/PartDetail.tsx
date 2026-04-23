@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
 import { CascadeView } from "@/components/CascadeView";
+import { ExtractedValues } from "@/components/ExtractedValues";
 import { FilesUploader } from "@/components/FilesUploader";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Sparkles, Loader2, Plus, X, CheckCircle2, UploadCloud } from "lucide-react";
