@@ -155,9 +155,8 @@ const PartesList = () => {
                   const c = computeCascade({
                     kg_production_total: Number(r.resumen_ia?.kg_produccion_total ?? 0),
                     kg_palets_alta: Number(r.resumen_ia?.kg_palets_alta ?? 0),
-                    kg_mujeres_manual: Number(r.resumen_ia?.kg_mujeres_server ?? r.kg_mujeres_manual ?? 0),
+                    kg_mujeres_manual: Number(r.resumen_ia?.kg_mujeres_l ?? r.kg_mujeres_manual ?? 0),
                     kg_podrido_calibrador_manual: Number(r.resumen_ia?.kg_podrido_server ?? r.kg_podrido_calibrador_manual ?? 0),
-                    kg_muestra: Number(r.resumen_ia?.kg_muestra_server ?? 0),
                     kg_reciclado_manual: r.kg_reciclado_manual,
                     kg_reciclado_malla_z1: r.kg_reciclado_malla_z1,
                     kg_reciclado_malla_z2: r.kg_reciclado_malla_z2,
