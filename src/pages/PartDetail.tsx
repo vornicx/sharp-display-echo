@@ -261,6 +261,7 @@ const PartDetail = () => {
         <ExtractedValues
           resumenIa={parte.resumen_ia}
           manual={{
+            kg_mujeres_manual: parte.kg_mujeres_manual,
             kg_reciclado_manual: parte.kg_reciclado_manual,
             kg_reciclado_malla_z1: parte.kg_reciclado_malla_z1,
             kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,
