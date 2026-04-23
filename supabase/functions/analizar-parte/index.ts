@@ -370,6 +370,9 @@ function serve() {
                   kg_mujeres_server = (kg_mujeres_server ?? 0) + mujeres;
                   kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
                   kg_muestra_server = (kg_muestra_server ?? 0) + muestra;
+                  if (mujeres > 0) sources.kg_mujeres_calibrador = { file: f.file_name, sheet: sheetName, note: 'filas con "PREC*" · columna Peso(kg)' };
+                  if (podrido > 0) sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg)' };
+                  if (muestra > 0) sources.kg_muestra = { file: f.file_name, sheet: sheetName, note: 'fila "MUESTRA" · columna Peso(kg)' };
                   console.log(`[producto] ${f.file_name} "${sheetName}": mujeres(PREC)=${mujeres.toFixed(2)} podrido=${podrido.toFixed(2)} muestra=${muestra.toFixed(2)}`);
                 }
               } catch (err) {
