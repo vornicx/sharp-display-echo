@@ -14,16 +14,427 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      asistencia_diaria: {
+        Row: {
+          ausentes: number
+          created_at: string
+          date: string
+          id: string
+          part_id: string | null
+          plantilla_total: number
+          presentes: number
+          user_id: string
+          zona_id: string
+        }
+        Insert: {
+          ausentes?: number
+          created_at?: string
+          date: string
+          id?: string
+          part_id?: string | null
+          plantilla_total?: number
+          presentes?: number
+          user_id: string
+          zona_id: string
+        }
+        Update: {
+          ausentes?: number
+          created_at?: string
+          date?: string
+          id?: string
+          part_id?: string | null
+          plantilla_total?: number
+          presentes?: number
+          user_id?: string
+          zona_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asistencia_diaria_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "partes_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      box_azules: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          kg_podrido: number
+          kg_reciclado: number
+          notes: string | null
+          part_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          kg_podrido?: number
+          kg_reciclado?: number
+          notes?: string | null
+          part_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          kg_podrido?: number
+          kg_reciclado?: number
+          notes?: string | null
+          part_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_azules_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "partes_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      costes_diarios: {
+        Row: {
+          cantidad: number
+          coste_unitario: number
+          created_at: string
+          date: string
+          id: string
+          part_id: string | null
+          tipo: string
+          unidad: string | null
+          user_id: string
+          zona_id: string
+        }
+        Insert: {
+          cantidad?: number
+          coste_unitario?: number
+          created_at?: string
+          date: string
+          id?: string
+          part_id?: string | null
+          tipo: string
+          unidad?: string | null
+          user_id: string
+          zona_id: string
+        }
+        Update: {
+          cantidad?: number
+          coste_unitario?: number
+          created_at?: string
+          date?: string
+          id?: string
+          part_id?: string | null
+          tipo?: string
+          unidad?: string | null
+          user_id?: string
+          zona_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "costes_diarios_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "partes_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gstock_entries: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          kg_expected: number
+          part_id: string
+          product: string
+          size_range: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          kg_expected?: number
+          part_id: string
+          product: string
+          size_range?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          kg_expected?: number
+          part_id?: string
+          product?: string
+          size_range?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gstock_entries_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "partes_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lotes_dia: {
+        Row: {
+          created_at: string
+          id: string
+          lote_codigo: string
+          notas: string | null
+          part_id: string
+          producto: string | null
+          source: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lote_codigo: string
+          notas?: string | null
+          part_id: string
+          producto?: string | null
+          source?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lote_codigo?: string
+          notas?: string | null
+          part_id?: string
+          producto?: string | null
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lotes_dia_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "partes_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partes_archivos: {
+        Row: {
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: Database["public"]["Enums"]["archivo_tipo"]
+          id: string
+          mime_type: string | null
+          part_id: string
+          uploaded_at: string
+          user_id: string
+        }
+        Insert: {
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type: Database["public"]["Enums"]["archivo_tipo"]
+          id?: string
+          mime_type?: string | null
+          part_id: string
+          uploaded_at?: string
+          user_id: string
+        }
+        Update: {
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: Database["public"]["Enums"]["archivo_tipo"]
+          id?: string
+          mime_type?: string | null
+          part_id?: string
+          uploaded_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partes_archivos_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "partes_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partes_diarios: {
+        Row: {
+          created_at: string
+          date: string
+          estado: Database["public"]["Enums"]["parte_estado"]
+          id: string
+          kg_inventario_final: number
+          kg_mujeres_manual: number
+          kg_podrido_calibrador_manual: number
+          kg_podrido_manual: number
+          kg_reciclado_malla_z1: number
+          kg_reciclado_malla_z2: number
+          kg_reciclado_manual: number
+          notas_generales: string | null
+          notas_inventario: string | null
+          resumen_ia: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          estado?: Database["public"]["Enums"]["parte_estado"]
+          id?: string
+          kg_inventario_final?: number
+          kg_mujeres_manual?: number
+          kg_podrido_calibrador_manual?: number
+          kg_podrido_manual?: number
+          kg_reciclado_malla_z1?: number
+          kg_reciclado_malla_z2?: number
+          kg_reciclado_manual?: number
+          notas_generales?: string | null
+          notas_inventario?: string | null
+          resumen_ia?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          estado?: Database["public"]["Enums"]["parte_estado"]
+          id?: string
+          kg_inventario_final?: number
+          kg_mujeres_manual?: number
+          kg_podrido_calibrador_manual?: number
+          kg_podrido_manual?: number
+          kg_reciclado_malla_z1?: number
+          kg_reciclado_malla_z2?: number
+          kg_reciclado_manual?: number
+          notas_generales?: string | null
+          notas_inventario?: string | null
+          resumen_ia?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      production_runs: {
+        Row: {
+          created_at: string
+          date: string
+          destination: string | null
+          id: string
+          kg_produced: number
+          part_id: string
+          product: string
+          size_range: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          destination?: string | null
+          id?: string
+          kg_produced?: number
+          part_id: string
+          product: string
+          size_range?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          destination?: string | null
+          id?: string
+          kg_produced?: number
+          part_id?: string
+          product?: string
+          size_range?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_runs_part_id_fkey"
+            columns: ["part_id"]
+            isOneToOne: false
+            referencedRelation: "partes_diarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "operario" | "admin"
+      archivo_tipo: "GSTOCK" | "Produccion" | "BoxAzules" | "FotoLotes" | "Otro"
+      parte_estado: "Borrador" | "Analizado" | "Con descuadre" | "Validado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +561,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["operario", "admin"],
+      archivo_tipo: ["GSTOCK", "Produccion", "BoxAzules", "FotoLotes", "Otro"],
+      parte_estado: ["Borrador", "Analizado", "Con descuadre", "Validado"],
+    },
   },
 } as const
