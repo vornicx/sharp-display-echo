@@ -495,12 +495,19 @@ function serve() {
         }));
       if (lotesRows.length) await admin.from("lotes_dia").insert(lotesRows);
 
-      // ---- Valores autoritativos extraídos por la IA ----
-      const kg_produccion_total = round2(Number(parsed.kg_produccion_total) || 0);
-      const kg_mujeres_calibrador = round2(Number(parsed.kg_mujeres_calibrador) || 0);
-      const kg_podrido_calibrador = round2(Number(parsed.kg_podrido_calibrador) || 0);
-      const kg_muestra = round2(Number(parsed.kg_muestra) || 0);
-      // kg_palets_alta: preferimos el cálculo server-side (suma "Netos") si está disponible
+      // ---- Valores autoritativos: preferimos cálculo server-side, fallback a IA ----
+      const kg_produccion_total = round2(
+        kg_produccion_total_server !== null ? kg_produccion_total_server : (Number(parsed.kg_produccion_total) || 0)
+      );
+      const kg_mujeres_calibrador = round2(
+        kg_mujeres_server !== null ? kg_mujeres_server : (Number(parsed.kg_mujeres_calibrador) || 0)
+      );
+      const kg_podrido_calibrador = round2(
+        kg_podrido_calib_server !== null ? kg_podrido_calib_server : (Number(parsed.kg_podrido_calibrador) || 0)
+      );
+      const kg_muestra = round2(
+        kg_muestra_server !== null ? kg_muestra_server : (Number(parsed.kg_muestra) || 0)
+      );
       const kg_palets_alta = round2(
         kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
       );
