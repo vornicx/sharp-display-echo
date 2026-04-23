@@ -196,6 +196,16 @@ function serve() {
       let kg_podrido_calib_server: number | null = null;
       let kg_muestra_server: number | null = null;
 
+      // Trazabilidad: de qué archivo/hoja salió cada valor
+      type Src = { file: string; sheet: string; note?: string };
+      const sources: Record<string, Src | null> = {
+        kg_produccion_total: null,
+        kg_palets_alta: null,
+        kg_mujeres_calibrador: null,
+        kg_podrido_calibrador: null,
+        kg_muestra: null,
+      };
+
       const norm = (s: any) =>
         String(s ?? "")
           .trim()
@@ -324,6 +334,7 @@ function serve() {
                 }
                 if (best && best.total > 0) {
                   kg_palets_alta_server = best.total;
+                  sources.kg_palets_alta = { file: f.file_name, sheet: best.sheet, note: `${best.count} palets · columna "Netos"` };
                   console.log(`[palets] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
                 }
               } catch (err) {
@@ -359,6 +370,9 @@ function serve() {
                   kg_mujeres_server = (kg_mujeres_server ?? 0) + mujeres;
                   kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
                   kg_muestra_server = (kg_muestra_server ?? 0) + muestra;
+                  if (mujeres > 0) sources.kg_mujeres_calibrador = { file: f.file_name, sheet: sheetName, note: 'filas con "PREC*" · columna Peso(kg)' };
+                  if (podrido > 0) sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg)' };
+                  if (muestra > 0) sources.kg_muestra = { file: f.file_name, sheet: sheetName, note: 'fila "MUESTRA" · columna Peso(kg)' };
                   console.log(`[producto] ${f.file_name} "${sheetName}": mujeres(PREC)=${mujeres.toFixed(2)} podrido=${podrido.toFixed(2)} muestra=${muestra.toFixed(2)}`);
                 }
               } catch (err) {
@@ -390,6 +404,11 @@ function serve() {
                   const total = totalsRow > 0 ? totalsRow : sumDetail;
                   if (total > 0) {
                     kg_produccion_total_server = total;
+                    sources.kg_produccion_total = {
+                      file: f.file_name,
+                      sheet: sheetName,
+                      note: totalsRow > 0 ? 'fila TOTALES · columna Peso (kg)' : "suma de filas de detalle · columna Peso (kg)",
+                    };
                     console.log(`[produccion] total=${total.toFixed(2)} (detail=${sumDetail.toFixed(2)}, totalsRow=${totalsRow.toFixed(2)}) from ${f.file_name}`);
                   }
                 }
@@ -519,6 +538,7 @@ function serve() {
         kg_podrido_calibrador,
         kg_muestra,
         analisis: parsed.analisis ?? "",
+        sources,
       };
 
       // Auto-rellenamos los campos del calibrador (vienen del archivo, no son "manuales" reales).
