@@ -202,9 +202,11 @@ function serve() {
         kg_produccion_total: null,
         kg_palets_alta: null,
         kg_mujeres_calibrador: null,
+        kg_mujeres_l: null,
         kg_podrido_calibrador: null,
         kg_muestra: null,
       };
+      let kg_mujeres_l_server: number | null = null;
 
       const norm = (s: any) =>
         String(s ?? "")
