@@ -196,6 +196,16 @@ function serve() {
       let kg_podrido_calib_server: number | null = null;
       let kg_muestra_server: number | null = null;
 
+      // Trazabilidad: de qué archivo/hoja salió cada valor
+      type Src = { file: string; sheet: string; note?: string };
+      const sources: Record<string, Src | null> = {
+        kg_produccion_total: null,
+        kg_palets_alta: null,
+        kg_mujeres_calibrador: null,
+        kg_podrido_calibrador: null,
+        kg_muestra: null,
+      };
+
       const norm = (s: any) =>
         String(s ?? "")
           .trim()
