@@ -381,7 +381,10 @@ function serve() {
       const kg_mujeres_calibrador = round2(Number(parsed.kg_mujeres_calibrador) || 0);
       const kg_podrido_calibrador = round2(Number(parsed.kg_podrido_calibrador) || 0);
       const kg_muestra = round2(Number(parsed.kg_muestra) || 0);
-      const kg_palets_alta = round2(Number(parsed.kg_palets_alta) || 0);
+      // kg_palets_alta: preferimos el cálculo server-side (suma "Netos") si está disponible
+      const kg_palets_alta = round2(
+        kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
+      );
 
       const resumen_ia = {
         kg_produccion_total,
