@@ -14,6 +14,7 @@
 // Manuales (NO los toca la IA): reciclado_manual, malla_z1, malla_z2, podrido_manual, inventario_final.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -219,26 +220,28 @@ function serve() {
               image_url: { url: `data:${f.mime_type};base64,${b64}` },
             });
           } else {
-            // Fetch file and embed as base64 so the model can actually read it.
+            // Parse xlsx/csv server-side to CSV text so the model can read it.
             const resp = await fetch(signed.signedUrl);
             const buf = new Uint8Array(await resp.arrayBuffer());
-            let binary = "";
-            const CHUNK = 0x8000;
-            for (let i = 0; i < buf.length; i += CHUNK) {
-              binary += String.fromCharCode.apply(
-                null,
-                buf.subarray(i, i + CHUNK) as unknown as number[],
-              );
+            let sheetsText = "";
+            try {
+              const wb = XLSX.read(buf, { type: "array" });
+              for (const sheetName of wb.SheetNames) {
+                const ws = wb.Sheets[sheetName];
+                const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+                sheetsText += `\n### Hoja: ${sheetName}\n${csv}\n`;
+              }
+            } catch (err) {
+              console.error("xlsx parse error", f.file_name, err);
+              sheetsText = `[No se pudo parsear ${f.file_name}]`;
             }
-            const b64 = btoa(binary);
-            const mime = f.mime_type ?? "application/octet-stream";
+            // Cap to avoid prompt bloat
+            if (sheetsText.length > 120_000) {
+              sheetsText = sheetsText.slice(0, 120_000) + "\n...[truncado]";
+            }
             content.push({
               type: "text",
-              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}, mime: ${mime}) ---`,
-            });
-            content.push({
-              type: "file",
-              file: { filename: f.file_name, file_data: `data:${mime};base64,${b64}` },
+              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}) ---\n${sheetsText}`,
             });
           }
         } catch (e) {
