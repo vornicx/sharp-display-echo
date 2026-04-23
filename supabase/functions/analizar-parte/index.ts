@@ -14,6 +14,7 @@
 // Manuales (NO los toca la IA): reciclado_manual, malla_z1, malla_z2, podrido_manual, inventario_final.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
