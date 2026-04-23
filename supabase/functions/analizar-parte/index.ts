@@ -391,7 +391,7 @@ function serve() {
                   ]);
                   if (headerIdx < 0 || cols[0] < 0) continue;
                   const pesoCol = cols[0];
-                  let sumDetail = 0;
+                  let lastDetail = 0;
                   let totalsRow = 0;
                   for (let r = headerIdx + 1; r < rows.length; r++) {
                     const row = rows[r] ?? [];
@@ -399,17 +399,17 @@ function serve() {
                     if (!isFinite(kg) || kg <= 0) continue;
                     const isTotalRow = row.some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
                     if (isTotalRow) { totalsRow = kg; continue; }
-                    sumDetail += kg;
+                    lastDetail = kg; // la columna Peso(kg) es acumulada → nos quedamos con el último valor del día
                   }
-                  const total = totalsRow > 0 ? totalsRow : sumDetail;
+                  const total = totalsRow > 0 ? totalsRow : lastDetail;
                   if (total > 0) {
                     kg_produccion_total_server = total;
                     sources.kg_produccion_total = {
                       file: f.file_name,
                       sheet: sheetName,
-                      note: totalsRow > 0 ? 'fila TOTALES · columna Peso (kg)' : "suma de filas de detalle · columna Peso (kg)",
+                      note: totalsRow > 0 ? 'fila TOTALES · columna Peso (kg)' : "último valor (acumulado) · columna Peso (kg)",
                     };
-                    console.log(`[produccion] total=${total.toFixed(2)} (detail=${sumDetail.toFixed(2)}, totalsRow=${totalsRow.toFixed(2)}) from ${f.file_name}`);
+                    console.log(`[produccion] total=${total.toFixed(2)} (lastDetail=${lastDetail.toFixed(2)}, totalsRow=${totalsRow.toFixed(2)}) from ${f.file_name}`);
                   }
                 }
               } catch (err) {
