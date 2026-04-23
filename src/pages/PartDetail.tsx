@@ -94,9 +94,8 @@ const PartDetail = () => {
     return computeCascade({
       kg_production_total: Number(parte.resumen_ia?.kg_produccion_total ?? 0),
       kg_palets_alta: Number(parte.resumen_ia?.kg_palets_alta ?? 0),
-      kg_mujeres_manual: parte.kg_mujeres_manual,
-      kg_podrido_calibrador_manual: parte.kg_podrido_calibrador_manual,
-      kg_muestra: Number(parte.resumen_ia?.kg_muestra ?? 0),
+      kg_mujeres_manual: Number(parte.resumen_ia?.kg_mujeres_l ?? parte.kg_mujeres_manual ?? 0),
+      kg_podrido_calibrador_manual: Number(parte.resumen_ia?.kg_podrido_server ?? parte.kg_podrido_calibrador_manual ?? 0),
       kg_reciclado_manual: parte.kg_reciclado_manual,
       kg_reciclado_malla_z1: parte.kg_reciclado_malla_z1,
       kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,
@@ -261,6 +260,7 @@ const PartDetail = () => {
         <ExtractedValues
           resumenIa={parte.resumen_ia}
           manual={{
+            kg_mujeres_manual: parte.kg_mujeres_manual,
             kg_reciclado_manual: parte.kg_reciclado_manual,
             kg_reciclado_malla_z1: parte.kg_reciclado_malla_z1,
             kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,

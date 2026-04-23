@@ -20,6 +20,7 @@ export const CascadeView = ({ cascade }: { cascade: CascadeOutput }) => {
         const displayValue = isPreGross ? s.running : s.value;
         const widthPct = Math.max(2, (Math.abs(displayValue) / max) * 100);
         const isFirst = idx === 0;
+        const isPlus = !s.isMinus && !isFirst;
         return (
           <div key={s.key}>
             <div className="grid grid-cols-12 items-center gap-3 text-sm">
@@ -31,7 +32,7 @@ export const CascadeView = ({ cascade }: { cascade: CascadeOutput }) => {
                   <div
                     className={cn(
                       "h-full transition-all duration-500",
-                      isFirst ? "bg-primary" : isPreGross ? "bg-secondary" : "bg-accent",
+                      isFirst ? "bg-primary" : isPlus ? "bg-success" : isPreGross ? "bg-secondary" : "bg-accent",
                     )}
                     style={{ width: `${Math.min(100, widthPct)}%` }}
                   />
