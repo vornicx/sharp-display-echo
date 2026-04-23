@@ -334,6 +334,7 @@ function serve() {
                 }
                 if (best && best.total > 0) {
                   kg_palets_alta_server = best.total;
+                  sources.kg_palets_alta = { file: f.file_name, sheet: best.sheet, note: `${best.count} palets · columna "Netos"` };
                   console.log(`[palets] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
                 }
               } catch (err) {
