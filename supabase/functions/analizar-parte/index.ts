@@ -227,8 +227,9 @@ function serve() {
             const resp = await fetch(signed.signedUrl);
             const buf = new Uint8Array(await resp.arrayBuffer());
             let sheetsText = "";
+            let wb: XLSX.WorkBook | null = null;
             try {
-              const wb = XLSX.read(buf, { type: "array" });
+              wb = XLSX.read(buf, { type: "array" });
               for (const sheetName of wb.SheetNames) {
                 const ws = wb.Sheets[sheetName];
                 const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
@@ -238,6 +239,46 @@ function serve() {
               console.error("xlsx parse error", f.file_name, err);
               sheetsText = `[No se pudo parsear ${f.file_name}]`;
             }
+
+            // Si es el archivo de palets, calcular deterministicamente la suma de "Netos"
+            if (wb && /palet/i.test(f.file_name)) {
+              try {
+                let total = 0;
+                for (const sheetName of wb.SheetNames) {
+                  const ws = wb.Sheets[sheetName];
+                  const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
+                  // Buscar fila de cabecera que contenga "Netos"
+                  let headerIdx = -1;
+                  let netosCol = -1;
+                  for (let r = 0; r < Math.min(rows.length, 30); r++) {
+                    const row = rows[r] ?? [];
+                    for (let c = 0; c < row.length; c++) {
+                      const cell = String(row[c] ?? "").trim().toLowerCase();
+                      if (cell === "netos" || cell === "neto" || cell === "kg netos" || cell === "peso neto") {
+                        headerIdx = r;
+                        netosCol = c;
+                        break;
+                      }
+                    }
+                    if (headerIdx >= 0) break;
+                  }
+                  if (headerIdx >= 0 && netosCol >= 0) {
+                    for (let r = headerIdx + 1; r < rows.length; r++) {
+                      const v = rows[r]?.[netosCol];
+                      const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/\./g, "").replace(",", "."));
+                      if (isFinite(n) && n > 0) total += n;
+                    }
+                  }
+                }
+                if (total > 0) {
+                  kg_palets_alta_server = total;
+                  console.log(`[palets] Netos sum (server) = ${total.toFixed(2)} kg from ${f.file_name}`);
+                }
+              } catch (err) {
+                console.error("palets Netos sum error", err);
+              }
+            }
+
             // Cap to avoid prompt bloat
             if (sheetsText.length > 120_000) {
               sheetsText = sheetsText.slice(0, 120_000) + "\n...[truncado]";
