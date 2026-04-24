@@ -23,6 +23,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { CascadeView } from "@/components/CascadeView";
 import { ExtractedValues } from "@/components/ExtractedValues";
+import { ExportPartesDialog } from "@/components/ExportPartesDialog";
 import { FilesUploader } from "@/components/FilesUploader";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Sparkles, Loader2, Plus, X, CheckCircle2, UploadCloud } from "lucide-react";
@@ -221,7 +222,8 @@ const PartDetail = () => {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <ExportPartesDialog defaultFrom={parte.date} defaultTo={parte.date} />
           <Button variant="outline" onClick={save} disabled={saving}>
             {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
             {t("part.save")}
