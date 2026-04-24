@@ -266,28 +266,48 @@ function serve() {
             const resp = await fetch(signed.signedUrl);
             let buf = new Uint8Array(await resp.arrayBuffer());
 
-            // ---- Sanitiza prefijos corruptos en xlsx ----
-            // Algunos archivos llegan con "PK00" delante del verdadero "PK\x03\x04"
-            // (corrupción típica de algunos exports de Windows / antivirus).
-            // SheetJS no detecta el formato y cae a CSV → devuelve basura binaria.
-            // Buscamos la primera ocurrencia real de la firma ZIP y recortamos.
-            const looksXlsxName = /\.(xlsx|xlsm|xlsb)$/i.test(f.file_name);
-            if (looksXlsxName && buf.length > 8) {
+            // ---- Repara xlsx con prefijo basura tipo "PK00" ----
+            // Algunos archivos llegan con N bytes basura antes del verdadero PK\x03\x04
+            // (ocurre con ciertos exports / antivirus). SheetJS rechaza el ZIP entonces.
+            // Recortamos los bytes y ajustamos los offsets del Central Directory + EOCD.
+            const looksXlsxName = /\.(xlsx|xlsm)$/i.test(f.file_name);
+            if (looksXlsxName && buf.length > 22) {
               const startsPK = buf[0] === 0x50 && buf[1] === 0x4b;
               const validZip = startsPK && buf[2] === 0x03 && buf[3] === 0x04;
               if (startsPK && !validZip) {
-                // Buscar PK\x03\x04 en los primeros ~256 bytes
                 const search = Math.min(buf.length - 4, 256);
                 let cut = -1;
                 for (let i = 1; i < search; i++) {
-                  if (buf[i] === 0x50 && buf[i + 1] === 0x4b && buf[i + 2] === 0x03 && buf[i + 3] === 0x04) {
-                    cut = i;
-                    break;
+                  if (buf[i] === 0x50 && buf[i+1] === 0x4b && buf[i+2] === 0x03 && buf[i+3] === 0x04) {
+                    cut = i; break;
                   }
                 }
                 if (cut > 0) {
-                  console.log(`[sanitize] ${f.file_name}: removed ${cut} corrupt prefix bytes before PK\\x03\\x04`);
-                  buf = buf.slice(cut);
+                  const out = buf.slice(cut);
+                  const view = new DataView(out.buffer, out.byteOffset, out.byteLength);
+                  let eocd = -1;
+                  const minEocd = Math.max(0, out.length - 65557);
+                  for (let i = out.length - 22; i >= minEocd; i--) {
+                    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+                  }
+                  if (eocd >= 0) {
+                    const totalEntries = view.getUint16(eocd + 10, true);
+                    const cdOffset = view.getUint32(eocd + 16, true);
+                    if (cdOffset >= cut) view.setUint32(eocd + 16, cdOffset - cut, true);
+                    let p = cdOffset >= cut ? cdOffset - cut : cdOffset;
+                    for (let i = 0; i < totalEntries; i++) {
+                      if (p + 46 > out.length) break;
+                      if (view.getUint32(p, true) !== 0x02014b50) break;
+                      const nameLen = view.getUint16(p + 28, true);
+                      const extraLen = view.getUint16(p + 30, true);
+                      const commentLen = view.getUint16(p + 32, true);
+                      const lho = view.getUint32(p + 42, true);
+                      if (lho >= cut) view.setUint32(p + 42, lho - cut, true);
+                      p += 46 + nameLen + extraLen + commentLen;
+                    }
+                    buf = out;
+                    console.log(`[zip-repair] ${f.file_name}: recortados ${cut} bytes basura y ajustados offsets ZIP`);
+                  }
                 }
               }
             }
