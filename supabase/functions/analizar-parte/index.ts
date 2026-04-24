@@ -4,12 +4,11 @@
 // REGLAS DE EXTRACCIÓN ESTRICTAS (Lasarte SAT, naranjas/cítricos):
 //
 //   1) kg_produccion_total       → Informe_produccion.xlsx → fila TOTALES → columna "Peso (kg)"
-//   2) kg_mujeres_calibrador     → Informe_producto.xlsx → SUMA de Peso(kg) de TODAS las filas
-//                                   cuyo "Producto" CONTIENE "PREC" (mujeres / reciclado calibrador)
+//   2) kg_mujeres_l              → Informe tamaños clase y calidad por variedad → SUMA Peso(kg)
+//                                   de filas cuya CLASE contiene "L" (mujeres / clase L)
 //   3) kg_podrido_calibrador     → Informe_producto.xlsx → fila "PODRIDO" → Peso(kg)
-//   4) kg_muestra                → Informe_producto.xlsx → fila "MUESTRA" → Peso(kg)
-//   5) kg_palets_alta            → palets_DDMMAAAA.xlsx → SUMA de la columna "Netos"
-//                                   de TODAS las filas con Netos > 0 (sin filtrar por TipoPalet/Sit)
+//   4) kg_palets_alta            → ARCHIVO GSTOCK → SUMA de la columna "Netos" de TODAS las filas
+//                                   (los palets dados de alta se leen del GSTOCK, NO del archivo de palets)
 //
 // Manuales (NO los toca la IA): reciclado_manual, malla_z1, malla_z2, podrido_manual, inventario_final.
 
