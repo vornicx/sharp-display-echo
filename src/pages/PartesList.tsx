@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ExportPartesDialog } from "@/components/ExportPartesDialog";
 import { toast } from "sonner";
 import { Plus, Eye, Loader2 } from "lucide-react";
 
@@ -108,10 +109,13 @@ const PartesList = () => {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{t("parts.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t("parts.subtitle")}</p>
         </div>
-        <Button onClick={createNew} disabled={creating}>
-          {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-          {t("parts.new")}
-        </Button>
+        <div className="flex gap-2">
+          <ExportPartesDialog />
+          <Button onClick={createNew} disabled={creating}>
+            {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+            {t("parts.new")}
+          </Button>
+        </div>
       </header>
 
       <Card className="p-4 shadow-card">
