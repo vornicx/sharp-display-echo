@@ -540,14 +540,13 @@ function serve() {
       const kg_produccion_total = round2(
         kg_produccion_total_server !== null ? kg_produccion_total_server : (Number(parsed.kg_produccion_total) || 0)
       );
-      const kg_mujeres_calibrador = round2(
-        kg_mujeres_server !== null ? kg_mujeres_server : (Number(parsed.kg_mujeres_calibrador) || 0)
+      const kg_mujeres_l = round2(
+        kg_mujeres_l_server !== null
+          ? kg_mujeres_l_server
+          : (Number(parsed.kg_mujeres_l) || Number(parsed.kg_mujeres_calibrador) || 0)
       );
       const kg_podrido_calibrador = round2(
         kg_podrido_calib_server !== null ? kg_podrido_calib_server : (Number(parsed.kg_podrido_calibrador) || 0)
-      );
-      const kg_muestra = round2(
-        kg_muestra_server !== null ? kg_muestra_server : (Number(parsed.kg_muestra) || 0)
       );
       const kg_palets_alta = round2(
         kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
@@ -556,17 +555,18 @@ function serve() {
       const resumen_ia = {
         kg_produccion_total,
         kg_palets_alta,
-        kg_mujeres_calibrador,
+        kg_mujeres_l,
+        // Aliases para compatibilidad con código antiguo de cascade que aún lee estas claves
+        kg_podrido_server: kg_podrido_calibrador,
         kg_podrido_calibrador,
-        kg_muestra,
         analisis: parsed.analisis ?? "",
         sources,
       };
 
-      // Auto-rellenamos los campos del calibrador (vienen del archivo, no son "manuales" reales).
+      // Auto-rellenamos los campos extraídos del archivo (no son "manuales" reales).
       const updates: Record<string, any> = {
         resumen_ia,
-        kg_mujeres_manual: kg_mujeres_calibrador,
+        kg_mujeres_manual: kg_mujeres_l,
         kg_podrido_calibrador_manual: kg_podrido_calibrador,
         estado: "Analizado",
       };
