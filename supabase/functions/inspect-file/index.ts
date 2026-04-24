@@ -12,34 +12,51 @@ Deno.serve(async (req) => {
   const { path } = await req.json();
   const { data: signed } = await admin.storage.from("partes-archivos").createSignedUrl(path, 600);
   const resp = await fetch(signed!.signedUrl);
-  const buf = new Uint8Array(await resp.arrayBuffer());
-  
-  // Magic bytes
-  const magic = Array.from(buf.slice(0, 8)).map(b => b.toString(16).padStart(2,'0')).join(' ');
-  const asAscii = new TextDecoder('latin1').decode(buf.slice(0, 200));
-  
-  // Try different parse modes
-  let r1: any = {}, r2: any = {}, r3: any = {};
-  try {
-    const wb = XLSX.read(buf, { type: "array" });
-    r1 = { ok: true, sheets: wb.SheetNames, firstRows: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).slice(0, 5) };
-  } catch (e) { r1 = { error: String(e) }; }
-  
-  try {
-    const wb = XLSX.read(buf, { type: "buffer" });
-    r2 = { ok: true, sheets: wb.SheetNames, firstRows: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).slice(0, 5) };
-  } catch (e) { r2 = { error: String(e) }; }
-  
-  try {
-    // base64
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) {
-      bin += String.fromCharCode.apply(null, buf.subarray(i, i+0x8000) as any);
+  let buf = new Uint8Array(await resp.arrayBuffer());
+
+  let cutBytes = 0;
+  if (buf.length > 8) {
+    const startsPK = buf[0] === 0x50 && buf[1] === 0x4b;
+    const validZip = startsPK && buf[2] === 0x03 && buf[3] === 0x04;
+    if (startsPK && !validZip) {
+      const search = Math.min(buf.length - 4, 256);
+      for (let i = 1; i < search; i++) {
+        if (buf[i] === 0x50 && buf[i+1] === 0x4b && buf[i+2] === 0x03 && buf[i+3] === 0x04) {
+          cutBytes = i;
+          buf = buf.slice(i);
+          break;
+        }
+      }
     }
-    const b64 = btoa(bin);
-    const wb = XLSX.read(b64, { type: "base64" });
-    r3 = { ok: true, sheets: wb.SheetNames, firstRows: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).slice(0, 5) };
-  } catch (e) { r3 = { error: String(e) }; }
-  
-  return new Response(JSON.stringify({ size: buf.length, magic, asAscii, r1, r2, r3 }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
+  const wb = XLSX.read(buf, { type: "array" });
+  const out: any = { cutBytes, sheets: {} };
+  for (const sn of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, blankrows: false, defval: null }) as any[][];
+    // Find Netos column
+    let netosCol = -1, headerIdx = -1;
+    for (let r = 0; r < Math.min(40, rows.length); r++) {
+      for (let c = 0; c < (rows[r]||[]).length; c++) {
+        const v = String(rows[r][c]||'').trim().toLowerCase();
+        if (v === 'netos' || v === 'neto') { netosCol = c; headerIdx = r; break; }
+      }
+      if (netosCol >= 0) break;
+    }
+    let total = 0, count = 0;
+    if (netosCol >= 0) {
+      for (let r = headerIdx + 1; r < rows.length; r++) {
+        const v = rows[r]?.[netosCol];
+        const n = typeof v === 'number' ? v : parseFloat(String(v||'').replace(/\./g,'').replace(',','.'));
+        if (isFinite(n) && n > 0) { total += n; count++; }
+      }
+    }
+    out.sheets[sn] = {
+      total_rows: rows.length,
+      headers: rows[headerIdx] || rows[0],
+      netosCol, headerIdx, total, count,
+      sample_data: rows.slice(headerIdx >= 0 ? headerIdx : 0, (headerIdx >= 0 ? headerIdx : 0) + 5),
+    };
+  }
+  return new Response(JSON.stringify(out, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });
