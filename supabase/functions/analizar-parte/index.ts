@@ -279,8 +279,11 @@ function serve() {
               sheetsText = `[No se pudo parsear ${f.file_name}]`;
             }
 
-            // --------- PALETS: suma determinista de "Netos" ---------
-            if (wb && /palet/i.test(f.file_name)) {
+            // --------- GSTOCK / PALETS: suma determinista de "Netos" ---------
+            // Prioridad: file_type=GSTOCK > nombre contiene "gstock" > nombre contiene "palet" (fallback).
+            const isGstock = f.file_type === "GSTOCK" || /g[\s_-]?stock/i.test(f.file_name);
+            const isPaletsLegacy = !isGstock && /palet/i.test(f.file_name);
+            if (wb && (isGstock || isPaletsLegacy)) {
               try {
                 let best: { total: number; count: number; col: number; sheet: string } | null = null;
                 for (const sheetName of wb.SheetNames) {
@@ -288,20 +291,16 @@ function serve() {
                   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
                   let headerIdx = -1;
                   let netosCols: number[] = [];
-                  let nPaletCol = -1;
                   for (let r = 0; r < Math.min(rows.length, 40); r++) {
                     const row = rows[r] ?? [];
                     const cols: number[] = [];
-                    let np = -1;
                     for (let c = 0; c < row.length; c++) {
                       const cell = norm(row[c]);
                       if (cell === "netos" || cell === "neto" || cell === "kg netos" || cell === "peso neto") cols.push(c);
-                      if (np === -1 && (cell === "nºpalet" || cell === "n°palet" || cell === "no palet" || cell === "npalet" || cell === "num palet" || cell === "numero palet" || cell === "no.palet" || cell === "nº palet")) np = c;
                     }
                     if (cols.length > 0) {
                       headerIdx = r;
                       netosCols = cols;
-                      nPaletCol = np;
                       break;
                     }
                   }
@@ -314,10 +313,6 @@ function serve() {
                       if (row.every((x) => x == null || String(x).trim() === "")) continue;
                       const isTotalRow = row.some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
                       if (isTotalRow) continue;
-                      if (nPaletCol >= 0) {
-                        const npv = row[nPaletCol];
-                        if (npv == null || String(npv).trim() === "") continue;
-                      }
                       const n = toNum(row[col]);
                       if (isFinite(n) && n > 0) { total += n; count += 1; }
                     }
@@ -325,50 +320,85 @@ function serve() {
                   }
                 }
                 if (best && best.total > 0) {
-                  kg_palets_alta_server = best.total;
-                  sources.kg_palets_alta = { file: f.file_name, sheet: best.sheet, note: `${best.count} palets · columna "Netos"` };
-                  console.log(`[palets] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
+                  // GSTOCK tiene prioridad: si ya hay valor de GSTOCK, no lo sobrescribimos con palets legacy
+                  if (kg_palets_alta_server === null || isGstock) {
+                    kg_palets_alta_server = best.total;
+                    sources.kg_palets_alta = {
+                      file: f.file_name,
+                      sheet: best.sheet,
+                      note: `${best.count} filas · columna "Netos"${isGstock ? " (GSTOCK)" : " (palets)"}`,
+                    };
+                  }
+                  console.log(`[${isGstock ? "gstock" : "palets"}] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
                 }
               } catch (err) {
-                console.error("palets Netos sum error", err);
+                console.error("Netos sum error", err);
               }
             }
 
-            // --------- INFORME_PRODUCTO: mujeres(PREC*), podrido, muestra ---------
-            if (wb && /producto/i.test(f.file_name)) {
+            // --------- INFORME TAMAÑOS/CLASE/CALIDAD: mujeres (clase L), podrido ---------
+            const isTamanosFile = /tama[ñn]o/i.test(f.file_name) || /clase/i.test(f.file_name) || /calidad/i.test(f.file_name) || /producto/i.test(f.file_name);
+            if (wb && isTamanosFile) {
               try {
                 for (const sheetName of wb.SheetNames) {
                   const ws = wb.Sheets[sheetName];
                   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
-                  const { headerIdx, cols } = findHeader(rows, [
-                    (h) => h === "producto",
-                    (h) => h === "peso(kg)" || h === "peso (kg)" || h === "peso kg" || h === "peso",
-                  ]);
-                  if (headerIdx < 0 || cols[0] < 0 || cols[1] < 0) continue;
-                  const prodCol = cols[0];
-                  const pesoCol = cols[1];
-                  let mujeres = 0, podrido = 0, muestra = 0;
+
+                  // Detectar headers: necesitamos columna Peso(kg) y opcionalmente Clase y Producto/Variedad
+                  let headerIdx = -1;
+                  let pesoCol = -1;
+                  let claseCol = -1;
+                  let prodCol = -1;
+                  for (let r = 0; r < Math.min(rows.length, 40); r++) {
+                    const row = rows[r] ?? [];
+                    let pc = -1, cc = -1, pr = -1;
+                    for (let c = 0; c < row.length; c++) {
+                      const cell = norm(row[c]);
+                      if (!cell) continue;
+                      if (pc === -1 && (cell === "peso(kg)" || cell === "peso (kg)" || cell === "peso kg" || cell === "peso")) pc = c;
+                      if (cc === -1 && (cell === "clase" || cell === "categoria" || cell === "categoría" || cell === "calidad")) cc = c;
+                      if (pr === -1 && (cell === "producto" || cell === "variedad" || cell === "denominacion" || cell === "denominación")) pr = c;
+                    }
+                    if (pc !== -1) {
+                      headerIdx = r;
+                      pesoCol = pc;
+                      claseCol = cc;
+                      prodCol = pr;
+                      break;
+                    }
+                  }
+                  if (headerIdx < 0 || pesoCol < 0) continue;
+
+                  let mujeresL = 0, podrido = 0;
                   for (let r = headerIdx + 1; r < rows.length; r++) {
                     const row = rows[r] ?? [];
-                    const prod = norm(row[prodCol]);
-                    if (!prod) continue;
-                    if (/\btotal(es)?\b/.test(prod)) continue;
                     const kg = toNum(row[pesoCol]);
                     if (!isFinite(kg)) continue;
-                    if (prod.includes("prec")) mujeres += kg;
-                    if (prod === "podrido") podrido += kg;
-                    if (prod.includes("muestra")) muestra += kg;
+                    const prodVal = prodCol >= 0 ? norm(row[prodCol]) : "";
+                    const claseVal = claseCol >= 0 ? norm(row[claseCol]) : "";
+                    if (prodVal && /\btotal(es)?\b/.test(prodVal)) continue;
+
+                    // Mujeres = filas con clase exactamente "L"
+                    if (claseCol >= 0 && claseVal === "l") {
+                      mujeresL += kg;
+                    }
+                    // Podrido = filas con producto/variedad "PODRIDO"
+                    if (prodVal === "podrido") {
+                      podrido += kg;
+                    }
                   }
-                  kg_mujeres_server = (kg_mujeres_server ?? 0) + mujeres;
-                  kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
-                  kg_muestra_server = (kg_muestra_server ?? 0) + muestra;
-                  if (mujeres > 0) sources.kg_mujeres_calibrador = { file: f.file_name, sheet: sheetName, note: 'filas con "PREC*" · columna Peso(kg)' };
-                  if (podrido > 0) sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg)' };
-                  if (muestra > 0) sources.kg_muestra = { file: f.file_name, sheet: sheetName, note: 'fila "MUESTRA" · columna Peso(kg)' };
-                  console.log(`[producto] ${f.file_name} "${sheetName}": mujeres(PREC)=${mujeres.toFixed(2)} podrido=${podrido.toFixed(2)} muestra=${muestra.toFixed(2)}`);
+                  if (mujeresL > 0) {
+                    kg_mujeres_l_server = (kg_mujeres_l_server ?? 0) + mujeresL;
+                    sources.kg_mujeres_l = { file: f.file_name, sheet: sheetName, note: 'filas con Clase="L" · columna Peso(kg)' };
+                  }
+                  if (podrido > 0) {
+                    kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
+                    sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg)' };
+                  }
+                  console.log(`[tamaños] ${f.file_name} "${sheetName}": mujeres(L)=${mujeresL.toFixed(2)} podrido=${podrido.toFixed(2)}`);
                 }
               } catch (err) {
-                console.error("producto parse error", err);
+                console.error("tamaños/producto parse error", err);
               }
             }
 
