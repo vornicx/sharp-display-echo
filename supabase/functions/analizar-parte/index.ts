@@ -264,7 +264,34 @@ function serve() {
           } else {
             // Parse xlsx/csv server-side to CSV text so the model can read it.
             const resp = await fetch(signed.signedUrl);
-            const buf = new Uint8Array(await resp.arrayBuffer());
+            let buf = new Uint8Array(await resp.arrayBuffer());
+
+            // ---- Sanitiza prefijos corruptos en xlsx ----
+            // Algunos archivos llegan con "PK00" delante del verdadero "PK\x03\x04"
+            // (corrupción típica de algunos exports de Windows / antivirus).
+            // SheetJS no detecta el formato y cae a CSV → devuelve basura binaria.
+            // Buscamos la primera ocurrencia real de la firma ZIP y recortamos.
+            const looksXlsxName = /\.(xlsx|xlsm|xlsb)$/i.test(f.file_name);
+            if (looksXlsxName && buf.length > 8) {
+              const startsPK = buf[0] === 0x50 && buf[1] === 0x4b;
+              const validZip = startsPK && buf[2] === 0x03 && buf[3] === 0x04;
+              if (startsPK && !validZip) {
+                // Buscar PK\x03\x04 en los primeros ~256 bytes
+                const search = Math.min(buf.length - 4, 256);
+                let cut = -1;
+                for (let i = 1; i < search; i++) {
+                  if (buf[i] === 0x50 && buf[i + 1] === 0x4b && buf[i + 2] === 0x03 && buf[i + 3] === 0x04) {
+                    cut = i;
+                    break;
+                  }
+                }
+                if (cut > 0) {
+                  console.log(`[sanitize] ${f.file_name}: removed ${cut} corrupt prefix bytes before PK\\x03\\x04`);
+                  buf = buf.slice(cut);
+                }
+              }
+            }
+
             let sheetsText = "";
             let wb: XLSX.WorkBook | null = null;
             try {
