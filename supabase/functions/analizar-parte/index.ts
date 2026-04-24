@@ -4,12 +4,11 @@
 // REGLAS DE EXTRACCIÓN ESTRICTAS (Lasarte SAT, naranjas/cítricos):
 //
 //   1) kg_produccion_total       → Informe_produccion.xlsx → fila TOTALES → columna "Peso (kg)"
-//   2) kg_mujeres_calibrador     → Informe_producto.xlsx → SUMA de Peso(kg) de TODAS las filas
-//                                   cuyo "Producto" CONTIENE "PREC" (mujeres / reciclado calibrador)
+//   2) kg_mujeres_l              → Informe tamaños clase y calidad por variedad → SUMA Peso(kg)
+//                                   de filas cuya CLASE contiene "L" (mujeres / clase L)
 //   3) kg_podrido_calibrador     → Informe_producto.xlsx → fila "PODRIDO" → Peso(kg)
-//   4) kg_muestra                → Informe_producto.xlsx → fila "MUESTRA" → Peso(kg)
-//   5) kg_palets_alta            → palets_DDMMAAAA.xlsx → SUMA de la columna "Netos"
-//                                   de TODAS las filas con Netos > 0 (sin filtrar por TipoPalet/Sit)
+//   4) kg_palets_alta            → ARCHIVO GSTOCK → SUMA de la columna "Netos" de TODAS las filas
+//                                   (los palets dados de alta se leen del GSTOCK, NO del archivo de palets)
 //
 // Manuales (NO los toca la IA): reciclado_manual, malla_z1, malla_z2, podrido_manual, inventario_final.
 
@@ -42,56 +41,47 @@ A) ARCHIVO "Informe_produccion.xlsx" (resumen del calibrador Spectrim)
        NUNCA sumes filas de detalle a mano: usa el total ya impreso.
    → Si solo hay una fila de detalle, ese es el total. Si hay varias, NO las sumes — usa la fila resumen.
 
-B) ARCHIVO "Informe_producto.xlsx" (desglose por producto)
+B) ARCHIVO "Informe tamaños clase y calidad por variedad" (también puede llamarse "Informe_producto.xlsx" o similar con "tama" / "clase" / "calidad" en el nombre)
    ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE QUE DEBES EVITAR ⚠️⚠️⚠️
-   El archivo tiene MUCHAS columnas, en este orden aproximado:
-     Producto | Empaque | Empaques | [columna vacía] | Peso(kg) | [columna vacía] | Fruta | Peso de Empaque Promedio | Conteo de Empaques Promedio
-   La columna **Peso(kg)** es la 4ª-5ª columna de datos (después del nombre del producto), NO la última.
-   La columna **Fruta** es el NÚMERO DE PIEZAS (frutos individuales), NO kilos.
+   El archivo tiene MUCHAS columnas. Las relevantes son:
+     Variedad | Clase (S/M/L/XL...) | Calibre/Tamaño | Peso(kg) | Empaques | Fruta | ...
+   La columna **Peso(kg)** suele ser la 4ª-5ª columna de datos.
+   La columna **Fruta** es el NÚMERO DE PIEZAS, NO kilos.
    La columna **Empaques** es el NÚMERO DE CAJAS, NO kilos.
 
-   ❌ NUNCA leas la columna "Fruta" como si fueran kg.
-   ❌ NUNCA leas la columna "Empaques" como si fueran kg.
-   ❌ NUNCA leas la columna "Empaque" (singular) como si fueran kg.
+   ❌ NUNCA leas "Fruta" / "Empaques" / "Empaque" como kg.
    ✅ SIEMPRE usa la columna cuyo header es exactamente "Peso(kg)" o "Peso (kg)".
 
-   Identifica la columna correcta por su HEADER EXACTO ("Peso(kg)"), NUNCA por posición.
-   Si el archivo está como imagen (PDF/JPG), localiza visualmente la columna "Peso(kg)" antes de leer datos.
-
    Reglas:
-     • "kg_mujeres_calibrador" = SUMA de la columna **Peso(kg)** de TODAS las filas cuyo "Producto"
-       CONTIENE la cadena "PREC" (case-insensitive, cualquier variante: PREC-1, PREC-2, PREC NAVELINA,
-       PREC LANE, PREC SALUSTIANA, etc.). Súmalas TODAS. Resultado típico: ~2.000-3.000 kg.
-     • "kg_podrido_calibrador" = **Peso(kg)** de la fila cuyo "Producto" sea "PODRIDO" (exacto, case-insensitive).
-       Resultado típico: ~1.000 kg. Si te sale ~3.500 kg has leído la columna "Fruta" — REVISA.
-     • "kg_muestra" = **Peso(kg)** de la fila cuyo "Producto" CONTIENE "MUESTRA".
-       Resultado típico: ~150 kg. Si te sale ~450 kg has leído la columna "Fruta" — REVISA.
+     • "kg_mujeres_l" = SUMA de la columna **Peso(kg)** de TODAS las filas cuya columna **Clase** sea
+       exactamente "L" (clase L = "mujeres"). Case-insensitive. Suma TODAS las variedades con clase L.
+       Resultado típico: ~2.000-5.000 kg.
+     • "kg_podrido_calibrador" = **Peso(kg)** de la fila cuyo "Producto" o "Variedad" sea "PODRIDO" (case-insensitive),
+       si existe en este archivo. Si no, déjalo a 0.
      • "produccion" = lista con TODAS las filas reales de producto (excluye totales). Cada fila:
        {product, size_range (calibre/tamaño si hay), kg_produced (=Peso(kg) de esa fila), destination}.
 
-   VALIDACIÓN OBLIGATORIA: la suma de TODOS los Peso(kg) del informe_producto debe ser
-   aproximadamente igual a kg_produccion_total (diferencia < 1 kg, es redondeo).
-   Si no cuadra, te has equivocado de columna — REVÍSALO antes de devolver el JSON.
+   VALIDACIÓN: la suma de TODOS los Peso(kg) del informe debe ser aproximadamente igual a kg_produccion_total
+   (diferencia < 1 kg, es redondeo). Si no cuadra, te has equivocado de columna — REVÍSALO.
 
-C) ARCHIVO DE PALETS (xlsx cuyo NOMBRE contiene "palet" o "palets" — IGNORA su file_type)
+C) ARCHIVO GSTOCK (xlsx cuyo file_type es GSTOCK o nombre contiene "gstock" / "g-stock")
    ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE ⚠️⚠️⚠️
-   Columnas en este orden aproximado:
-     TipoPalet | NºPalet | Fecha | Denominación Producto | Lote | DcmtoVta | Fecha (albarán) | Cliente | Cajas | TipoCaja | Netos | Fact. | Sit
-   La columna correcta es **Netos** (peso neto en kg de cada palet, valores típicos 600-900 kg por fila).
-   ❌ NUNCA sumes "Cajas" (es número de cajas, valores 50-80 por fila, sumaría miles bajos).
+   El GSTOCK es el archivo de PALETS DADOS DE ALTA (no es solo planificación).
+   Suele tener una columna llamada **Netos** (peso neto en kg de cada palet, valores típicos 600-900 kg por fila).
+
+   ❌ NUNCA sumes "Cajas" (es número de cajas).
    ❌ NUNCA sumes "Fact." (es importe en euros).
    ❌ NUNCA sumes "NºPalet" (es identificador).
    ✅ SIEMPRE usa la columna cuyo header es exactamente "Netos".
 
    → "kg_palets_alta" = SUMA de la columna "Netos" de TODAS las filas con Netos > 0.
    → NO filtres por TipoPalet ni por Sit. Suma TODOS los palets con Netos positivo.
-   → Ignora filas con Netos ≤ 0 (errores de datos).
-   → NO uses el archivo GSTOCK para esto.
    → Resultado típico de un día normal: 80.000 - 120.000 kg.
-     Si te sale <20.000 kg has sumado la columna equivocada (Cajas/Fact./NºPalet) — REVISA.
 
-D) ARCHIVO GSTOCK (planificación, solo si su nombre NO contiene "palet")
-   → "gstock" = lista {product, size_range, kg_expected}. Es solo informativo.
+   → "gstock" = lista {product, size_range, kg_expected} para descuadres por producto (informativo).
+
+D) ARCHIVO DE PALETS antiguo (xlsx cuyo NOMBRE contiene "palet" pero NO es GSTOCK)
+   → Solo se usa como FALLBACK si no hay archivo GSTOCK. Misma regla: suma columna "Netos".
 
 E) FOTO DE LOTES (imagen)
    → "lotes" = [{lote_codigo, producto?}] con los códigos visibles.
@@ -101,9 +91,8 @@ DEVUELVE SIEMPRE ESTE JSON EXACTO (sin texto fuera del JSON):
 
 {
   "kg_produccion_total": number,
-  "kg_mujeres_calibrador": number,
+  "kg_mujeres_l": number,
   "kg_podrido_calibrador": number,
-  "kg_muestra": number,
   "kg_palets_alta": number,
   "produccion": [{"product": string, "size_range": string|null, "kg_produced": number, "destination": string|null}],
   "gstock":     [{"product": string, "size_range": string|null, "kg_expected": number}],
@@ -118,9 +107,9 @@ REGLAS FINALES:
 - Las cantidades manuales (reciclado manual, malla Z1, malla Z2, podrido manual, inventario final)
   NUNCA las extraigas: las introduce el operario. NO las incluyas en el JSON.
 - ANTES de devolver el JSON, VERIFICA mentalmente:
-    · ¿He usado la columna "Peso(kg)" en el informe_producto (no "Fruta" ni "Empaques")?
-    · ¿He usado la columna "Netos" en el archivo de palets (no "Cajas" ni "Fact.")?
-    · ¿La suma de Peso(kg) del informe_producto ≈ kg_produccion_total?
+    · ¿He usado la columna "Peso(kg)" en el informe de tamaños/clase (no "Fruta" ni "Empaques")?
+    · ¿He sumado SOLO las filas con Clase = "L" para kg_mujeres_l?
+    · ¿He usado la columna "Netos" del GSTOCK para kg_palets_alta?
     · ¿kg_palets_alta está en el rango 50.000-150.000 (no en miles bajos)?
   Si alguna respuesta es NO, CORRIGE antes de responder.`;
 
@@ -169,18 +158,23 @@ function serve() {
 
       const files: FileMeta[] = (archivos ?? []) as any;
 
-      // Detección heurística por nombre
-      const paletsFile = files.find((x) => /palet/i.test(x.file_name));
+      // Detección heurística por nombre / file_type
+      // GSTOCK: file_type = "GSTOCK" o nombre contiene "gstock"
+      const gstockFile = files.find((x) => x.file_type === "GSTOCK" || /g[\s_-]?stock/i.test(x.file_name));
+      // Archivo de palets antiguo (fallback si no hay GSTOCK)
+      const paletsFile = files.find((x) => x !== gstockFile && /palet/i.test(x.file_name));
       const prodTotalFile = files.find((x) => /producci[oó]n/i.test(x.file_name) && !/producto/i.test(x.file_name));
-      const productoFile = files.find((x) => /producto/i.test(x.file_name) || /tama[ñn]o/i.test(x.file_name) || /clase/i.test(x.file_name));
+      // Informe de tamaños / clase / calidad / producto (de aquí salen mujeres L y podrido)
+      const tamanosFile = files.find((x) => /tama[ñn]o/i.test(x.file_name) || /clase/i.test(x.file_name) || /calidad/i.test(x.file_name) || /producto/i.test(x.file_name));
 
       const hints: string[] = [];
       if (prodTotalFile) hints.push(`• "${prodTotalFile.file_name}" → INFORME PRODUCCIÓN (toma fila TOTALES → columna Peso(kg) → kg_produccion_total).`);
       else hints.push("• AVISO: no se ha detectado Informe_produccion.xlsx → kg_produccion_total = 0.");
-      if (productoFile) hints.push(`• "${productoFile.file_name}" → INFORME PRODUCTO (suma PREC* → kg_mujeres_calibrador; fila PODRIDO → kg_podrido_calibrador; fila MUESTRA → kg_muestra).`);
-      else hints.push("• AVISO: no se ha detectado Informe_producto.xlsx → mujeres/podrido/muestra = 0.");
-      if (paletsFile) hints.push(`• "${paletsFile.file_name}" → ARCHIVO DE PALETS (suma columna Netos>0 de TODAS las filas → kg_palets_alta). IGNORA su file_type.`);
-      else hints.push("• AVISO: no se ha detectado archivo de palets → kg_palets_alta = 0.");
+      if (tamanosFile) hints.push(`• "${tamanosFile.file_name}" → INFORME TAMAÑOS/CLASE/CALIDAD (suma Peso(kg) de filas con Clase="L" → kg_mujeres_l; fila PODRIDO → kg_podrido_calibrador).`);
+      else hints.push("• AVISO: no se ha detectado el informe de tamaños/clase/calidad → kg_mujeres_l = 0.");
+      if (gstockFile) hints.push(`• "${gstockFile.file_name}" → ARCHIVO GSTOCK (suma columna Netos>0 de TODAS las filas → kg_palets_alta).`);
+      else if (paletsFile) hints.push(`• "${paletsFile.file_name}" → FALLBACK PALETS (suma columna Netos>0 → kg_palets_alta).`);
+      else hints.push("• AVISO: no se ha detectado archivo GSTOCK ni de palets → kg_palets_alta = 0.");
 
       const content: any[] = [
         {
@@ -192,18 +186,16 @@ function serve() {
       // Cálculo determinista server-side
       let kg_palets_alta_server: number | null = null;
       let kg_produccion_total_server: number | null = null;
-      let kg_mujeres_server: number | null = null;
+      let kg_mujeres_l_server: number | null = null;
       let kg_podrido_calib_server: number | null = null;
-      let kg_muestra_server: number | null = null;
 
       // Trazabilidad: de qué archivo/hoja salió cada valor
       type Src = { file: string; sheet: string; note?: string };
       const sources: Record<string, Src | null> = {
         kg_produccion_total: null,
         kg_palets_alta: null,
-        kg_mujeres_calibrador: null,
+        kg_mujeres_l: null,
         kg_podrido_calibrador: null,
-        kg_muestra: null,
       };
 
       const norm = (s: any) =>
@@ -287,8 +279,11 @@ function serve() {
               sheetsText = `[No se pudo parsear ${f.file_name}]`;
             }
 
-            // --------- PALETS: suma determinista de "Netos" ---------
-            if (wb && /palet/i.test(f.file_name)) {
+            // --------- GSTOCK / PALETS: suma determinista de "Netos" ---------
+            // Prioridad: file_type=GSTOCK > nombre contiene "gstock" > nombre contiene "palet" (fallback).
+            const isGstock = f.file_type === "GSTOCK" || /g[\s_-]?stock/i.test(f.file_name);
+            const isPaletsLegacy = !isGstock && /palet/i.test(f.file_name);
+            if (wb && (isGstock || isPaletsLegacy)) {
               try {
                 let best: { total: number; count: number; col: number; sheet: string } | null = null;
                 for (const sheetName of wb.SheetNames) {
@@ -296,20 +291,16 @@ function serve() {
                   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
                   let headerIdx = -1;
                   let netosCols: number[] = [];
-                  let nPaletCol = -1;
                   for (let r = 0; r < Math.min(rows.length, 40); r++) {
                     const row = rows[r] ?? [];
                     const cols: number[] = [];
-                    let np = -1;
                     for (let c = 0; c < row.length; c++) {
                       const cell = norm(row[c]);
                       if (cell === "netos" || cell === "neto" || cell === "kg netos" || cell === "peso neto") cols.push(c);
-                      if (np === -1 && (cell === "nºpalet" || cell === "n°palet" || cell === "no palet" || cell === "npalet" || cell === "num palet" || cell === "numero palet" || cell === "no.palet" || cell === "nº palet")) np = c;
                     }
                     if (cols.length > 0) {
                       headerIdx = r;
                       netosCols = cols;
-                      nPaletCol = np;
                       break;
                     }
                   }
@@ -322,10 +313,6 @@ function serve() {
                       if (row.every((x) => x == null || String(x).trim() === "")) continue;
                       const isTotalRow = row.some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
                       if (isTotalRow) continue;
-                      if (nPaletCol >= 0) {
-                        const npv = row[nPaletCol];
-                        if (npv == null || String(npv).trim() === "") continue;
-                      }
                       const n = toNum(row[col]);
                       if (isFinite(n) && n > 0) { total += n; count += 1; }
                     }
@@ -333,50 +320,85 @@ function serve() {
                   }
                 }
                 if (best && best.total > 0) {
-                  kg_palets_alta_server = best.total;
-                  sources.kg_palets_alta = { file: f.file_name, sheet: best.sheet, note: `${best.count} palets · columna "Netos"` };
-                  console.log(`[palets] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
+                  // GSTOCK tiene prioridad: si ya hay valor de GSTOCK, no lo sobrescribimos con palets legacy
+                  if (kg_palets_alta_server === null || isGstock) {
+                    kg_palets_alta_server = best.total;
+                    sources.kg_palets_alta = {
+                      file: f.file_name,
+                      sheet: best.sheet,
+                      note: `${best.count} filas · columna "Netos"${isGstock ? " (GSTOCK)" : " (palets)"}`,
+                    };
+                  }
+                  console.log(`[${isGstock ? "gstock" : "palets"}] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
                 }
               } catch (err) {
-                console.error("palets Netos sum error", err);
+                console.error("Netos sum error", err);
               }
             }
 
-            // --------- INFORME_PRODUCTO: mujeres(PREC*), podrido, muestra ---------
-            if (wb && /producto/i.test(f.file_name)) {
+            // --------- INFORME TAMAÑOS/CLASE/CALIDAD: mujeres (clase L), podrido ---------
+            const isTamanosFile = /tama[ñn]o/i.test(f.file_name) || /clase/i.test(f.file_name) || /calidad/i.test(f.file_name) || /producto/i.test(f.file_name);
+            if (wb && isTamanosFile) {
               try {
                 for (const sheetName of wb.SheetNames) {
                   const ws = wb.Sheets[sheetName];
                   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
-                  const { headerIdx, cols } = findHeader(rows, [
-                    (h) => h === "producto",
-                    (h) => h === "peso(kg)" || h === "peso (kg)" || h === "peso kg" || h === "peso",
-                  ]);
-                  if (headerIdx < 0 || cols[0] < 0 || cols[1] < 0) continue;
-                  const prodCol = cols[0];
-                  const pesoCol = cols[1];
-                  let mujeres = 0, podrido = 0, muestra = 0;
+
+                  // Detectar headers: necesitamos columna Peso(kg) y opcionalmente Clase y Producto/Variedad
+                  let headerIdx = -1;
+                  let pesoCol = -1;
+                  let claseCol = -1;
+                  let prodCol = -1;
+                  for (let r = 0; r < Math.min(rows.length, 40); r++) {
+                    const row = rows[r] ?? [];
+                    let pc = -1, cc = -1, pr = -1;
+                    for (let c = 0; c < row.length; c++) {
+                      const cell = norm(row[c]);
+                      if (!cell) continue;
+                      if (pc === -1 && (cell === "peso(kg)" || cell === "peso (kg)" || cell === "peso kg" || cell === "peso")) pc = c;
+                      if (cc === -1 && (cell === "clase" || cell === "categoria" || cell === "categoría" || cell === "calidad")) cc = c;
+                      if (pr === -1 && (cell === "producto" || cell === "variedad" || cell === "denominacion" || cell === "denominación")) pr = c;
+                    }
+                    if (pc !== -1) {
+                      headerIdx = r;
+                      pesoCol = pc;
+                      claseCol = cc;
+                      prodCol = pr;
+                      break;
+                    }
+                  }
+                  if (headerIdx < 0 || pesoCol < 0) continue;
+
+                  let mujeresL = 0, podrido = 0;
                   for (let r = headerIdx + 1; r < rows.length; r++) {
                     const row = rows[r] ?? [];
-                    const prod = norm(row[prodCol]);
-                    if (!prod) continue;
-                    if (/\btotal(es)?\b/.test(prod)) continue;
                     const kg = toNum(row[pesoCol]);
                     if (!isFinite(kg)) continue;
-                    if (prod.includes("prec")) mujeres += kg;
-                    if (prod === "podrido") podrido += kg;
-                    if (prod.includes("muestra")) muestra += kg;
+                    const prodVal = prodCol >= 0 ? norm(row[prodCol]) : "";
+                    const claseVal = claseCol >= 0 ? norm(row[claseCol]) : "";
+                    if (prodVal && /\btotal(es)?\b/.test(prodVal)) continue;
+
+                    // Mujeres = filas con clase exactamente "L"
+                    if (claseCol >= 0 && claseVal === "l") {
+                      mujeresL += kg;
+                    }
+                    // Podrido = filas con producto/variedad "PODRIDO"
+                    if (prodVal === "podrido") {
+                      podrido += kg;
+                    }
                   }
-                  kg_mujeres_server = (kg_mujeres_server ?? 0) + mujeres;
-                  kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
-                  kg_muestra_server = (kg_muestra_server ?? 0) + muestra;
-                  if (mujeres > 0) sources.kg_mujeres_calibrador = { file: f.file_name, sheet: sheetName, note: 'filas con "PREC*" · columna Peso(kg)' };
-                  if (podrido > 0) sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg)' };
-                  if (muestra > 0) sources.kg_muestra = { file: f.file_name, sheet: sheetName, note: 'fila "MUESTRA" · columna Peso(kg)' };
-                  console.log(`[producto] ${f.file_name} "${sheetName}": mujeres(PREC)=${mujeres.toFixed(2)} podrido=${podrido.toFixed(2)} muestra=${muestra.toFixed(2)}`);
+                  if (mujeresL > 0) {
+                    kg_mujeres_l_server = (kg_mujeres_l_server ?? 0) + mujeresL;
+                    sources.kg_mujeres_l = { file: f.file_name, sheet: sheetName, note: 'filas con Clase="L" · columna Peso(kg)' };
+                  }
+                  if (podrido > 0) {
+                    kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
+                    sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg)' };
+                  }
+                  console.log(`[tamaños] ${f.file_name} "${sheetName}": mujeres(L)=${mujeresL.toFixed(2)} podrido=${podrido.toFixed(2)}`);
                 }
               } catch (err) {
-                console.error("producto parse error", err);
+                console.error("tamaños/producto parse error", err);
               }
             }
 
@@ -518,14 +540,13 @@ function serve() {
       const kg_produccion_total = round2(
         kg_produccion_total_server !== null ? kg_produccion_total_server : (Number(parsed.kg_produccion_total) || 0)
       );
-      const kg_mujeres_calibrador = round2(
-        kg_mujeres_server !== null ? kg_mujeres_server : (Number(parsed.kg_mujeres_calibrador) || 0)
+      const kg_mujeres_l = round2(
+        kg_mujeres_l_server !== null
+          ? kg_mujeres_l_server
+          : (Number(parsed.kg_mujeres_l) || Number(parsed.kg_mujeres_calibrador) || 0)
       );
       const kg_podrido_calibrador = round2(
         kg_podrido_calib_server !== null ? kg_podrido_calib_server : (Number(parsed.kg_podrido_calibrador) || 0)
-      );
-      const kg_muestra = round2(
-        kg_muestra_server !== null ? kg_muestra_server : (Number(parsed.kg_muestra) || 0)
       );
       const kg_palets_alta = round2(
         kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
@@ -534,17 +555,18 @@ function serve() {
       const resumen_ia = {
         kg_produccion_total,
         kg_palets_alta,
-        kg_mujeres_calibrador,
+        kg_mujeres_l,
+        // Aliases para compatibilidad con código antiguo de cascade que aún lee estas claves
+        kg_podrido_server: kg_podrido_calibrador,
         kg_podrido_calibrador,
-        kg_muestra,
         analisis: parsed.analisis ?? "",
         sources,
       };
 
-      // Auto-rellenamos los campos del calibrador (vienen del archivo, no son "manuales" reales).
+      // Auto-rellenamos los campos extraídos del archivo (no son "manuales" reales).
       const updates: Record<string, any> = {
         resumen_ia,
-        kg_mujeres_manual: kg_mujeres_calibrador,
+        kg_mujeres_manual: kg_mujeres_l,
         kg_podrido_calibrador_manual: kg_podrido_calibrador,
         estado: "Analizado",
       };
