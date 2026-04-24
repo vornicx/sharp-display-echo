@@ -158,18 +158,23 @@ function serve() {
 
       const files: FileMeta[] = (archivos ?? []) as any;
 
-      // Detección heurística por nombre
-      const paletsFile = files.find((x) => /palet/i.test(x.file_name));
+      // Detección heurística por nombre / file_type
+      // GSTOCK: file_type = "GSTOCK" o nombre contiene "gstock"
+      const gstockFile = files.find((x) => x.file_type === "GSTOCK" || /g[\s_-]?stock/i.test(x.file_name));
+      // Archivo de palets antiguo (fallback si no hay GSTOCK)
+      const paletsFile = files.find((x) => x !== gstockFile && /palet/i.test(x.file_name));
       const prodTotalFile = files.find((x) => /producci[oó]n/i.test(x.file_name) && !/producto/i.test(x.file_name));
-      const productoFile = files.find((x) => /producto/i.test(x.file_name) || /tama[ñn]o/i.test(x.file_name) || /clase/i.test(x.file_name));
+      // Informe de tamaños / clase / calidad / producto (de aquí salen mujeres L y podrido)
+      const tamanosFile = files.find((x) => /tama[ñn]o/i.test(x.file_name) || /clase/i.test(x.file_name) || /calidad/i.test(x.file_name) || /producto/i.test(x.file_name));
 
       const hints: string[] = [];
       if (prodTotalFile) hints.push(`• "${prodTotalFile.file_name}" → INFORME PRODUCCIÓN (toma fila TOTALES → columna Peso(kg) → kg_produccion_total).`);
       else hints.push("• AVISO: no se ha detectado Informe_produccion.xlsx → kg_produccion_total = 0.");
-      if (productoFile) hints.push(`• "${productoFile.file_name}" → INFORME PRODUCTO (suma PREC* → kg_mujeres_calibrador; fila PODRIDO → kg_podrido_calibrador; fila MUESTRA → kg_muestra).`);
-      else hints.push("• AVISO: no se ha detectado Informe_producto.xlsx → mujeres/podrido/muestra = 0.");
-      if (paletsFile) hints.push(`• "${paletsFile.file_name}" → ARCHIVO DE PALETS (suma columna Netos>0 de TODAS las filas → kg_palets_alta). IGNORA su file_type.`);
-      else hints.push("• AVISO: no se ha detectado archivo de palets → kg_palets_alta = 0.");
+      if (tamanosFile) hints.push(`• "${tamanosFile.file_name}" → INFORME TAMAÑOS/CLASE/CALIDAD (suma Peso(kg) de filas con Clase="L" → kg_mujeres_l; fila PODRIDO → kg_podrido_calibrador).`);
+      else hints.push("• AVISO: no se ha detectado el informe de tamaños/clase/calidad → kg_mujeres_l = 0.");
+      if (gstockFile) hints.push(`• "${gstockFile.file_name}" → ARCHIVO GSTOCK (suma columna Netos>0 de TODAS las filas → kg_palets_alta).`);
+      else if (paletsFile) hints.push(`• "${paletsFile.file_name}" → FALLBACK PALETS (suma columna Netos>0 → kg_palets_alta).`);
+      else hints.push("• AVISO: no se ha detectado archivo GSTOCK ni de palets → kg_palets_alta = 0.");
 
       const content: any[] = [
         {
@@ -181,18 +186,16 @@ function serve() {
       // Cálculo determinista server-side
       let kg_palets_alta_server: number | null = null;
       let kg_produccion_total_server: number | null = null;
-      let kg_mujeres_server: number | null = null;
+      let kg_mujeres_l_server: number | null = null;
       let kg_podrido_calib_server: number | null = null;
-      let kg_muestra_server: number | null = null;
 
       // Trazabilidad: de qué archivo/hoja salió cada valor
       type Src = { file: string; sheet: string; note?: string };
       const sources: Record<string, Src | null> = {
         kg_produccion_total: null,
         kg_palets_alta: null,
-        kg_mujeres_calibrador: null,
+        kg_mujeres_l: null,
         kg_podrido_calibrador: null,
-        kg_muestra: null,
       };
 
       const norm = (s: any) =>
