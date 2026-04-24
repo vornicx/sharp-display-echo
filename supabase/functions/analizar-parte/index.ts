@@ -41,56 +41,47 @@ A) ARCHIVO "Informe_produccion.xlsx" (resumen del calibrador Spectrim)
        NUNCA sumes filas de detalle a mano: usa el total ya impreso.
    → Si solo hay una fila de detalle, ese es el total. Si hay varias, NO las sumes — usa la fila resumen.
 
-B) ARCHIVO "Informe_producto.xlsx" (desglose por producto)
+B) ARCHIVO "Informe tamaños clase y calidad por variedad" (también puede llamarse "Informe_producto.xlsx" o similar con "tama" / "clase" / "calidad" en el nombre)
    ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE QUE DEBES EVITAR ⚠️⚠️⚠️
-   El archivo tiene MUCHAS columnas, en este orden aproximado:
-     Producto | Empaque | Empaques | [columna vacía] | Peso(kg) | [columna vacía] | Fruta | Peso de Empaque Promedio | Conteo de Empaques Promedio
-   La columna **Peso(kg)** es la 4ª-5ª columna de datos (después del nombre del producto), NO la última.
-   La columna **Fruta** es el NÚMERO DE PIEZAS (frutos individuales), NO kilos.
+   El archivo tiene MUCHAS columnas. Las relevantes son:
+     Variedad | Clase (S/M/L/XL...) | Calibre/Tamaño | Peso(kg) | Empaques | Fruta | ...
+   La columna **Peso(kg)** suele ser la 4ª-5ª columna de datos.
+   La columna **Fruta** es el NÚMERO DE PIEZAS, NO kilos.
    La columna **Empaques** es el NÚMERO DE CAJAS, NO kilos.
 
-   ❌ NUNCA leas la columna "Fruta" como si fueran kg.
-   ❌ NUNCA leas la columna "Empaques" como si fueran kg.
-   ❌ NUNCA leas la columna "Empaque" (singular) como si fueran kg.
+   ❌ NUNCA leas "Fruta" / "Empaques" / "Empaque" como kg.
    ✅ SIEMPRE usa la columna cuyo header es exactamente "Peso(kg)" o "Peso (kg)".
 
-   Identifica la columna correcta por su HEADER EXACTO ("Peso(kg)"), NUNCA por posición.
-   Si el archivo está como imagen (PDF/JPG), localiza visualmente la columna "Peso(kg)" antes de leer datos.
-
    Reglas:
-     • "kg_mujeres_calibrador" = SUMA de la columna **Peso(kg)** de TODAS las filas cuyo "Producto"
-       CONTIENE la cadena "PREC" (case-insensitive, cualquier variante: PREC-1, PREC-2, PREC NAVELINA,
-       PREC LANE, PREC SALUSTIANA, etc.). Súmalas TODAS. Resultado típico: ~2.000-3.000 kg.
-     • "kg_podrido_calibrador" = **Peso(kg)** de la fila cuyo "Producto" sea "PODRIDO" (exacto, case-insensitive).
-       Resultado típico: ~1.000 kg. Si te sale ~3.500 kg has leído la columna "Fruta" — REVISA.
-     • "kg_muestra" = **Peso(kg)** de la fila cuyo "Producto" CONTIENE "MUESTRA".
-       Resultado típico: ~150 kg. Si te sale ~450 kg has leído la columna "Fruta" — REVISA.
+     • "kg_mujeres_l" = SUMA de la columna **Peso(kg)** de TODAS las filas cuya columna **Clase** sea
+       exactamente "L" (clase L = "mujeres"). Case-insensitive. Suma TODAS las variedades con clase L.
+       Resultado típico: ~2.000-5.000 kg.
+     • "kg_podrido_calibrador" = **Peso(kg)** de la fila cuyo "Producto" o "Variedad" sea "PODRIDO" (case-insensitive),
+       si existe en este archivo. Si no, déjalo a 0.
      • "produccion" = lista con TODAS las filas reales de producto (excluye totales). Cada fila:
        {product, size_range (calibre/tamaño si hay), kg_produced (=Peso(kg) de esa fila), destination}.
 
-   VALIDACIÓN OBLIGATORIA: la suma de TODOS los Peso(kg) del informe_producto debe ser
-   aproximadamente igual a kg_produccion_total (diferencia < 1 kg, es redondeo).
-   Si no cuadra, te has equivocado de columna — REVÍSALO antes de devolver el JSON.
+   VALIDACIÓN: la suma de TODOS los Peso(kg) del informe debe ser aproximadamente igual a kg_produccion_total
+   (diferencia < 1 kg, es redondeo). Si no cuadra, te has equivocado de columna — REVÍSALO.
 
-C) ARCHIVO DE PALETS (xlsx cuyo NOMBRE contiene "palet" o "palets" — IGNORA su file_type)
+C) ARCHIVO GSTOCK (xlsx cuyo file_type es GSTOCK o nombre contiene "gstock" / "g-stock")
    ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE ⚠️⚠️⚠️
-   Columnas en este orden aproximado:
-     TipoPalet | NºPalet | Fecha | Denominación Producto | Lote | DcmtoVta | Fecha (albarán) | Cliente | Cajas | TipoCaja | Netos | Fact. | Sit
-   La columna correcta es **Netos** (peso neto en kg de cada palet, valores típicos 600-900 kg por fila).
-   ❌ NUNCA sumes "Cajas" (es número de cajas, valores 50-80 por fila, sumaría miles bajos).
+   El GSTOCK es el archivo de PALETS DADOS DE ALTA (no es solo planificación).
+   Suele tener una columna llamada **Netos** (peso neto en kg de cada palet, valores típicos 600-900 kg por fila).
+
+   ❌ NUNCA sumes "Cajas" (es número de cajas).
    ❌ NUNCA sumes "Fact." (es importe en euros).
    ❌ NUNCA sumes "NºPalet" (es identificador).
    ✅ SIEMPRE usa la columna cuyo header es exactamente "Netos".
 
    → "kg_palets_alta" = SUMA de la columna "Netos" de TODAS las filas con Netos > 0.
    → NO filtres por TipoPalet ni por Sit. Suma TODOS los palets con Netos positivo.
-   → Ignora filas con Netos ≤ 0 (errores de datos).
-   → NO uses el archivo GSTOCK para esto.
    → Resultado típico de un día normal: 80.000 - 120.000 kg.
-     Si te sale <20.000 kg has sumado la columna equivocada (Cajas/Fact./NºPalet) — REVISA.
 
-D) ARCHIVO GSTOCK (planificación, solo si su nombre NO contiene "palet")
-   → "gstock" = lista {product, size_range, kg_expected}. Es solo informativo.
+   → "gstock" = lista {product, size_range, kg_expected} para descuadres por producto (informativo).
+
+D) ARCHIVO DE PALETS antiguo (xlsx cuyo NOMBRE contiene "palet" pero NO es GSTOCK)
+   → Solo se usa como FALLBACK si no hay archivo GSTOCK. Misma regla: suma columna "Netos".
 
 E) FOTO DE LOTES (imagen)
    → "lotes" = [{lote_codigo, producto?}] con los códigos visibles.
@@ -100,9 +91,8 @@ DEVUELVE SIEMPRE ESTE JSON EXACTO (sin texto fuera del JSON):
 
 {
   "kg_produccion_total": number,
-  "kg_mujeres_calibrador": number,
+  "kg_mujeres_l": number,
   "kg_podrido_calibrador": number,
-  "kg_muestra": number,
   "kg_palets_alta": number,
   "produccion": [{"product": string, "size_range": string|null, "kg_produced": number, "destination": string|null}],
   "gstock":     [{"product": string, "size_range": string|null, "kg_expected": number}],
@@ -117,9 +107,9 @@ REGLAS FINALES:
 - Las cantidades manuales (reciclado manual, malla Z1, malla Z2, podrido manual, inventario final)
   NUNCA las extraigas: las introduce el operario. NO las incluyas en el JSON.
 - ANTES de devolver el JSON, VERIFICA mentalmente:
-    · ¿He usado la columna "Peso(kg)" en el informe_producto (no "Fruta" ni "Empaques")?
-    · ¿He usado la columna "Netos" en el archivo de palets (no "Cajas" ni "Fact.")?
-    · ¿La suma de Peso(kg) del informe_producto ≈ kg_produccion_total?
+    · ¿He usado la columna "Peso(kg)" en el informe de tamaños/clase (no "Fruta" ni "Empaques")?
+    · ¿He sumado SOLO las filas con Clase = "L" para kg_mujeres_l?
+    · ¿He usado la columna "Netos" del GSTOCK para kg_palets_alta?
     · ¿kg_palets_alta está en el rango 50.000-150.000 (no en miles bajos)?
   Si alguna respuesta es NO, CORRIGE antes de responder.`;
 
