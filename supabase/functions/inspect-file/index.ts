@@ -13,16 +13,33 @@ Deno.serve(async (req) => {
   const { data: signed } = await admin.storage.from("partes-archivos").createSignedUrl(path, 600);
   const resp = await fetch(signed!.signedUrl);
   const buf = new Uint8Array(await resp.arrayBuffer());
-  const wb = XLSX.read(buf, { type: "array" });
-  const out: any = { sheets: {} };
-  for (const sn of wb.SheetNames) {
-    const ws = wb.Sheets[sn];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null }) as any[][];
-    out.sheets[sn] = {
-      total_rows: rows.length,
-      first_15: rows.slice(0, 15),
-      last_5: rows.slice(-5),
-    };
-  }
-  return new Response(JSON.stringify(out, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  
+  // Magic bytes
+  const magic = Array.from(buf.slice(0, 8)).map(b => b.toString(16).padStart(2,'0')).join(' ');
+  const asAscii = new TextDecoder('latin1').decode(buf.slice(0, 200));
+  
+  // Try different parse modes
+  let r1: any = {}, r2: any = {}, r3: any = {};
+  try {
+    const wb = XLSX.read(buf, { type: "array" });
+    r1 = { ok: true, sheets: wb.SheetNames, firstRows: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).slice(0, 5) };
+  } catch (e) { r1 = { error: String(e) }; }
+  
+  try {
+    const wb = XLSX.read(buf, { type: "buffer" });
+    r2 = { ok: true, sheets: wb.SheetNames, firstRows: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).slice(0, 5) };
+  } catch (e) { r2 = { error: String(e) }; }
+  
+  try {
+    // base64
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, buf.subarray(i, i+0x8000) as any);
+    }
+    const b64 = btoa(bin);
+    const wb = XLSX.read(b64, { type: "base64" });
+    r3 = { ok: true, sheets: wb.SheetNames, firstRows: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }).slice(0, 5) };
+  } catch (e) { r3 = { error: String(e) }; }
+  
+  return new Response(JSON.stringify({ size: buf.length, magic, asAscii, r1, r2, r3 }, null, 2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });
