@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
-import { computeCascade } from "@/lib/cascade";
+import { computeCascade, CascadeOutput } from "@/lib/cascade";
 import { fmtKg, fmtPct } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import { ExtractedValues } from "@/components/ExtractedValues";
 import { ExportPartesDialog } from "@/components/ExportPartesDialog";
 import { FilesUploader } from "@/components/FilesUploader";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Sparkles, Loader2, Plus, X, CheckCircle2, UploadCloud } from "lucide-react";
+import { ArrowLeft, Save, Sparkles, Loader as Loader2, Plus, X, CircleCheck as CheckCircle2, CloudUpload as UploadCloud } from "lucide-react";
 
 interface Parte {
   id: string;
@@ -93,6 +93,28 @@ const PartDetail = () => {
 
   const cascade = useMemo(() => {
     if (!parte) return null;
+    // Prefer server-computed cascade from resumen_ia (computed by edge function)
+    if (parte.resumen_ia?.cascade) {
+      const c = parte.resumen_ia.cascade;
+      return {
+        steps: c.steps.map((s: any) => ({
+          key: s.key,
+          labelKey: `part.cascade.${s.key}`,
+          value: s.value,
+          running: s.running,
+          isMinus: s.isMinus,
+        })),
+        produced: c.produced,
+        palets: c.palets,
+        grossDiff: c.grossDiff,
+        totalShrinkage: c.totalShrinkage,
+        unjustifiedDiff: c.unjustifiedDiff,
+        realDiff: c.realDiff,
+        deviationPct: c.deviationPct,
+        realDeviationPct: c.realDeviationPct,
+      } as CascadeOutput;
+    }
+    // Fallback: compute client-side
     return computeCascade({
       kg_production_total: Number(parte.resumen_ia?.kg_produccion_total ?? 0),
       kg_palets_alta: Number(parte.resumen_ia?.kg_palets_alta ?? 0),
@@ -425,9 +447,15 @@ const PartDetail = () => {
           {parte.resumen_ia && (
             <Card className="p-5">
               <h3 className="font-semibold mb-3">Análisis</h3>
-              <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-96 whitespace-pre-wrap">
-                {parte.resumen_ia.analisis ?? JSON.stringify(parte.resumen_ia, null, 2)}
-              </pre>
+              {parte.resumen_ia.analisis ? (
+                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                  {parte.resumen_ia.analisis}
+                </p>
+              ) : (
+                <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-96 whitespace-pre-wrap">
+                  {JSON.stringify(parte.resumen_ia, null, 2)}
+                </pre>
+              )}
             </Card>
           )}
 
