@@ -31,6 +31,7 @@ export interface CascadeInputs {
   kg_reciclado_malla_z2?: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
+  kg_palets_pendientes_anterior?: number; // Palets sin dar de alta del día anterior — se RESTA al inventario
 }
 
 export interface CascadeOutput {
