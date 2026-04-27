@@ -486,7 +486,7 @@ const PartDetail = () => {
   );
 };
 
-const NumField = ({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) => (
+const NumField = ({ label, value, onChange, hint }: { label: string; value: number; onChange: (n: number) => void; hint?: string }) => (
   <div className="space-y-2">
     <Label>{label}</Label>
     <div className="relative">
