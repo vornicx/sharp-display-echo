@@ -7,7 +7,7 @@
  *      = PRODUCCIÓN AJUSTADA
  *   3. − Mujeres (L) — clase L del informe de tamaños, dato duplicado
  *   4. − Palets dados de alta
- *   5. − Inventario final
+ *   5. − Inventario final NETO (= inventario final − palets sin alta del día anterior)
  *      = DIFERENCIA BRUTA
  *   6. − Podrido calibrador
  *   7. − Reciclado malla Z1
