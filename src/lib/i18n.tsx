@@ -103,6 +103,7 @@ const es: Dict = {
   "part.cascade.minus_podrido_manual": "− Podrido manual",
   "part.cascade.minus_palets": "− Palets dados de alta",
   "part.cascade.minus_inventario": "− Inventario final",
+  "part.cascade.minus_inventario_neto": "− Inventario neto (final − pendientes día ant.)",
   "part.cascade.real_diff": "= Diferencia real (sin justificar)",
   "part.cascade.gross_diff": "Diferencia bruta (a justificar)",
   "part.cascade.unjustified_diff": "= Diferencia sin justificar",
