@@ -477,17 +477,67 @@ Deno.serve(async (req: Request) => {
 
           // ── INFORME TAMAÑOS/CLASE/CALIDAD: mujeres (clase L) ──
           const isTamanosFile = /tama[ñn]o/i.test(f.file_name) || /clase/i.test(f.file_name) || /calidad/i.test(f.file_name);
-          if (wb && isTamanosFile) {
-            try {
-              for (const sheetName of wb.SheetNames) {
-                const ws = wb.Sheets[sheetName];
-                const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
+          // INFORME TAMAÑOS/CLASE/CALIDAD — mujeres clase L
+// Estructura real: bloques con "Clase: ... MUJERES" seguidos de filas de detalle
+// y una fila de subtotal por bloque (col sin texto en col[5], valor en col[29] aprox)
+const isTamanosFile = /tamano/i.test(f.filename) || /clase/i.test(f.filename) || /calidad/i.test(f.filename);
+if (wb && isTamanosFile) {
+  try {
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: null });
 
-                let headerIdx = -1, pesoCol = -1, claseCol = -1, prodCol = -1;
-                for (let r = 0; r < Math.min(rows.length, 40); r++) {
-                  const row = rows[r] ?? [];
-                  let pc = -1, cc = -1, pr = -1;
-                  for (let c = 0; c < row.length; c++) {
+      let mujeresL = 0;
+      let inMujeresBlock = false;
+
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r] as unknown[];
+
+        // Detectar inicio de bloque MUJERES
+        // La fila tiene col[5]="Clase:" y col[47]="MUJERES" (u otro índice con MUJERES)
+        const hasMujeres = row.some(cell => /mujeres/i.test(String(cell ?? '')));
+        const hasClaseLabel = /^clase/i.test(norm(row[5]));
+        if (hasClaseLabel && hasMujeres) {
+          inMujeresBlock = true;
+          continue;
+        }
+
+        // Si estamos en bloque mujeres, buscar la fila de SUBTOTAL del bloque
+        // Es la fila donde col[5] está vacío/null y col[29] tiene un número > 1000
+        // (los subtotales son siempre > 1000 kg, las filas de detalle < 2000 pero pueden solaparse)
+        // La fila de subtotal NO tiene texto en col[5] y tiene número grande en col[29]
+        if (inMujeresBlock) {
+          const col5 = norm(row[5]);
+          const col29 = toNum(row[29]);
+
+          // Fin del bloque: nueva sección "Clase:" o "Variedad:" o "Total de Calidad:"
+          if (/^(clase|variedad|total)/i.test(col5)) {
+            inMujeresBlock = false;
+            // No hacer continue: esta fila puede ser inicio de otro bloque
+            // (ya se evaluará en siguiente iteración)
+            r--; // retroceder para que se evalúe como posible nuevo bloque
+            continue;
+          }
+
+          // Fila de subtotal del bloque: col[5] vacío y col[29] es número razonable
+          // La fila de detalle tiene texto en col[5] (nombre del tamaño)
+          // La fila de subtotal tiene col[5] null/vacío
+          if (!col5 && isFinite(col29) && col29 > 100) {
+            mujeresL += col29;
+            inMujeresBlock = false; // un subtotal por bloque, luego ya no sumamos más
+            console.log(`tamaños mujeres subtotal en fila ${r}: ${col29.toFixed(2)} kg`);
+          }
+        }
+      }
+
+      if (mujeresL > 0) {
+        kgmujereslserver = (kgmujereslserver ?? 0) + mujeresL;
+        sources['kgmujeresl'] = { file: f.filename, sheet: sheetName, note: `subtotales bloques MUJERES col[29]` };
+        console.log(`tamaños ${f.filename} ${sheetName} mujeresL=${mujeresL.toFixed(2)}`);
+      }
+    }
+  } catch (err) { console.error('tamaños parse error', err); }
+}
   const cell = norm(row[c]);
   if (!cell) continue;
   // Columna clase
