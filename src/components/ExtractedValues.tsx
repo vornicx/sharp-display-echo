@@ -98,7 +98,7 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
       hint: "Introducido en la pestaña Manual",
     },
     {
-      label: "Podrido manual",
+      label: "Podrido manual bolsa basura",
       value: manual.kg_podrido_manual,
       origin: "manual",
       hint: "Introducido en la pestaña Manual",
