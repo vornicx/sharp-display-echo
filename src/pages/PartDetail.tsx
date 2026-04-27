@@ -500,6 +500,7 @@ const NumField = ({ label, value, onChange, hint }: { label: string; value: numb
       />
       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">kg</span>
     </div>
+    {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
   </div>
 );
 
