@@ -488,13 +488,29 @@ Deno.serve(async (req: Request) => {
                   const row = rows[r] ?? [];
                   let pc = -1, cc = -1, pr = -1;
                   for (let c = 0; c < row.length; c++) {
-                    const cell = norm(row[c]);
-                    if (!cell) continue;
-                    if (pc === -1 && (cell === "peso(kg)" || cell === "peso (kg)" || cell === "peso kg" || cell === "peso")) pc = c;
-                    if (cc === -1 && (cell === "clase" || cell === "categoria" || cell === "categoría" || cell === "calidad")) cc = c;
-                    if (pr === -1 && (cell === "producto" || cell === "variedad" || cell === "denominacion" || cell === "denominación")) pr = c;
-                  }
-                  if (pc !== -1) { headerIdx = r; pesoCol = pc; claseCol = cc; prodCol = pr; break; }
+  const cell = norm(row[c]);
+  if (!cell) continue;
+  // Columna clase
+  if (cc === -1 && (cell === 'clase' || cell === 'categoria' || cell === 'categoría' || cell === 'calidad')) cc = c;
+  // Columna producto/variedad
+  if (pr === -1 && (cell === 'producto' || cell === 'variedad' || cell === 'denominacion' || cell === 'denominación')) pr = c;
+  // Columna peso: NUNCA coger si el header contiene "fruta" o "empaque"
+  if (pc === -1 && (cell === 'pesokg' || cell === 'peso kg' || cell === 'peso (kg)' || cell === 'peso kg' || cell === 'kg')) {
+    if (!cell.includes('fruta') && !cell.includes('empaque')) pc = c;
+  }
+}
+// Verificación extra: asegurarse que pesoCol no es la misma columna que fruta/empaques
+// buscando la primera columna con header "pesokg" o "peso kg" que no sea fruta
+if (pc === -1) {
+  // fallback: recorrer de nuevo buscando cualquier columna con "peso" y sin "fruta"/"empaque"
+  for (let c = 0; c < row.length; c++) {
+    const cell = norm(row[c]);
+    if (cell.includes('peso') && !cell.includes('fruta') && !cell.includes('empaque')) {
+      pc = c; break;
+    }
+  }
+}
+if (pc !== -1) { headerIdx = r; pesoCol = pc; claseCol = cc; prodCol = pr; break; }
                 }
                 if (headerIdx < 0 || pesoCol < 0) continue;
 
