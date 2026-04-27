@@ -145,6 +145,26 @@ function serve() {
         .eq("id", partId)
         .maybeSingle();
       if (pErr || !parte) return j({ success: false, error: "Part not found" }, 404);
+      // ─── Auto-rellenar kg_palets_pendientes_anterior desde el día anterior ───
+if (!parte.kg_palets_pendientes_anterior) {
+  const { data: parteAnterior } = await admin
+    .from("partes_diarios")
+    .select("kg_inventario_final")
+    .eq("user_id", parte.user_id)
+    .lt("date", parte.date)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (parteAnterior?.kg_inventario_final) {
+    parte.kg_palets_pendientes_anterior = parteAnterior.kg_inventario_final;
+    await admin
+      .from("partes_diarios")
+      .update({ kg_palets_pendientes_anterior: parteAnterior.kg_inventario_final })
+      .eq("id", partId);
+    console.log(`[inventario-anterior] ${parteAnterior.kg_inventario_final} kg copiado del parte anterior`);
+  }
+}
       if (parte.user_id !== userId) {
         const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", userId);
         const isAdmin = roles?.some((r: any) => r.role === "admin");
