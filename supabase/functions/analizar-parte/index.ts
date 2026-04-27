@@ -139,16 +139,39 @@ function serve() {
 
       const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
+      // SELECT * para tener todos los campos del parte (incluido kg_palets_pendientes_anterior)
       const { data: parte, error: pErr } = await admin
         .from("partes_diarios")
-        .select("id, user_id, date")
+        .select("*")
         .eq("id", partId)
         .maybeSingle();
       if (pErr || !parte) return j({ success: false, error: "Part not found" }, 404);
+
       if (parte.user_id !== userId) {
         const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", userId);
-        const isAdmin = roles?.some((r: any) => r.role === "admin");
+        const isAdmin = roles?.some((r: { role: string }) => r.role === "admin");
         if (!isAdmin) return j({ success: false, error: "Forbidden" }, 403);
+      }
+
+      // ─── Auto-rellenar kg_palets_pendientes_anterior desde el día anterior ───
+      if (!parte.kg_palets_pendientes_anterior) {
+        const { data: parteAnterior } = await admin
+          .from("partes_diarios")
+          .select("kg_inventario_final")
+          .eq("user_id", parte.user_id)
+          .lt("date", parte.date)
+          .order("date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (parteAnterior?.kg_inventario_final) {
+          parte.kg_palets_pendientes_anterior = parteAnterior.kg_inventario_final;
+          await admin
+            .from("partes_diarios")
+            .update({ kg_palets_pendientes_anterior: parteAnterior.kg_inventario_final })
+            .eq("id", partId);
+          console.log(`[inventario-anterior] ${parteAnterior.kg_inventario_final} kg copiado del parte anterior`);
+        }
       }
 
       const { data: archivos } = await admin
@@ -156,15 +179,12 @@ function serve() {
         .select("id, file_name, file_path, file_type, mime_type")
         .eq("part_id", partId);
 
-      const files: FileMeta[] = (archivos ?? []) as any;
+      const files: FileMeta[] = (archivos ?? []) as FileMeta[];
 
       // Detección heurística por nombre / file_type
-      // GSTOCK: file_type = "GSTOCK" o nombre contiene "gstock"
       const gstockFile = files.find((x) => x.file_type === "GSTOCK" || /g[\s_-]?stock/i.test(x.file_name));
-      // Archivo de palets antiguo (fallback si no hay GSTOCK)
       const paletsFile = files.find((x) => x !== gstockFile && /palet/i.test(x.file_name));
       const prodTotalFile = files.find((x) => /producci[oó]n/i.test(x.file_name) && !/producto/i.test(x.file_name));
-      // Informe de tamaños / clase / calidad / producto (de aquí salen mujeres L y podrido)
       const tamanosFile = files.find((x) => /tama[ñn]o/i.test(x.file_name) || /clase/i.test(x.file_name) || /calidad/i.test(x.file_name) || /producto/i.test(x.file_name));
 
       const hints: string[] = [];
@@ -183,13 +203,11 @@ function serve() {
         },
       ];
 
-      // Cálculo determinista server-side
       let kg_palets_alta_server: number | null = null;
       let kg_produccion_total_server: number | null = null;
       let kg_mujeres_l_server: number | null = null;
       let kg_podrido_calib_server: number | null = null;
 
-      // Trazabilidad: de qué archivo/hoja salió cada valor
       type Src = { file: string; sheet: string; note?: string };
       const sources: Record<string, Src | null> = {
         kg_produccion_total: null,
@@ -199,32 +217,22 @@ function serve() {
       };
 
       const norm = (s: any) =>
-        String(s ?? "")
-          .trim()
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "");
+        String(s ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const toNum = (v: any): number => {
         if (v == null || v === "") return NaN;
         if (typeof v === "number") return v;
-        // Español: "1.234,56" → 1234.56
         const s = String(v).trim().replace(/\s/g, "");
-        if (/,\d+$/.test(s)) {
-          return parseFloat(s.replace(/\./g, "").replace(",", "."));
-        }
+        if (/,\d+$/.test(s)) return parseFloat(s.replace(/\./g, "").replace(",", "."));
         return parseFloat(s.replace(/,/g, ""));
       };
       const findHeader = (rows: any[][], matchers: ((h: string) => boolean)[]) => {
-        // Devuelve {headerIdx, cols:[col per matcher, -1 si no se encuentra]}
         for (let r = 0; r < Math.min(rows.length, 40); r++) {
           const row = rows[r] ?? [];
           const cols = matchers.map(() => -1);
           for (let c = 0; c < row.length; c++) {
             const cell = norm(row[c]);
             if (!cell) continue;
-            matchers.forEach((m, i) => {
-              if (cols[i] === -1 && m(cell)) cols[i] = c;
-            });
+            matchers.forEach((m, i) => { if (cols[i] === -1 && m(cell)) cols[i] = c; });
           }
           if (cols[0] !== -1) return { headerIdx: r, cols };
         }
@@ -242,34 +250,18 @@ function serve() {
           if (isImage) {
             const resp = await fetch(signed.signedUrl);
             const buf = new Uint8Array(await resp.arrayBuffer());
-            // Encode in chunks to avoid "Maximum call stack size exceeded"
-            // when using btoa(String.fromCharCode(...buf)) on large images.
             let binary = "";
-            const CHUNK = 0x8000; // 32KB
+            const CHUNK = 0x8000;
             for (let i = 0; i < buf.length; i += CHUNK) {
-              binary += String.fromCharCode.apply(
-                null,
-                buf.subarray(i, i + CHUNK) as unknown as number[],
-              );
+              binary += String.fromCharCode.apply(null, buf.subarray(i, i + CHUNK) as unknown as number[]);
             }
             const b64 = btoa(binary);
-            content.push({
-              type: "text",
-              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}) ---`,
-            });
-            content.push({
-              type: "image_url",
-              image_url: { url: `data:${f.mime_type};base64,${b64}` },
-            });
+            content.push({ type: "text", text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}) ---` });
+            content.push({ type: "image_url", image_url: { url: `data:${f.mime_type};base64,${b64}` } });
           } else {
-            // Parse xlsx/csv server-side to CSV text so the model can read it.
             const resp = await fetch(signed.signedUrl);
             let buf = new Uint8Array(await resp.arrayBuffer());
 
-            // ---- Repara xlsx con prefijo basura tipo "PK00" ----
-            // Algunos archivos llegan con N bytes basura antes del verdadero PK\x03\x04
-            // (ocurre con ciertos exports / antivirus). SheetJS rechaza el ZIP entonces.
-            // Recortamos los bytes y ajustamos los offsets del Central Directory + EOCD.
             const looksXlsxName = /\.(xlsx|xlsm)$/i.test(f.file_name);
             if (looksXlsxName && buf.length > 22) {
               const startsPK = buf[0] === 0x50 && buf[1] === 0x4b;
@@ -278,9 +270,7 @@ function serve() {
                 const search = Math.min(buf.length - 4, 256);
                 let cut = -1;
                 for (let i = 1; i < search; i++) {
-                  if (buf[i] === 0x50 && buf[i+1] === 0x4b && buf[i+2] === 0x03 && buf[i+3] === 0x04) {
-                    cut = i; break;
-                  }
+                  if (buf[i] === 0x50 && buf[i+1] === 0x4b && buf[i+2] === 0x03 && buf[i+3] === 0x04) { cut = i; break; }
                 }
                 if (cut > 0) {
                   const out = buf.slice(cut);
@@ -306,7 +296,7 @@ function serve() {
                       p += 46 + nameLen + extraLen + commentLen;
                     }
                     buf = out;
-                    console.log(`[zip-repair] ${f.file_name}: recortados ${cut} bytes basura y ajustados offsets ZIP`);
+                    console.log(`[zip-repair] ${f.file_name}: recortados ${cut} bytes basura`);
                   }
                 }
               }
@@ -326,8 +316,7 @@ function serve() {
               sheetsText = `[No se pudo parsear ${f.file_name}]`;
             }
 
-            // --------- GSTOCK / PALETS: suma determinista de "Netos" ---------
-            // Prioridad: file_type=GSTOCK > nombre contiene "gstock" > nombre contiene "palet" (fallback).
+            // GSTOCK / PALETS
             const isGstock = f.file_type === "GSTOCK" || /g[\s_-]?stock/i.test(f.file_name);
             const isPaletsLegacy = !isGstock && /palet/i.test(f.file_name);
             if (wb && (isGstock || isPaletsLegacy)) {
@@ -345,16 +334,11 @@ function serve() {
                       const cell = norm(row[c]);
                       if (cell === "netos" || cell === "neto" || cell === "kg netos" || cell === "peso neto") cols.push(c);
                     }
-                    if (cols.length > 0) {
-                      headerIdx = r;
-                      netosCols = cols;
-                      break;
-                    }
+                    if (cols.length > 0) { headerIdx = r; netosCols = cols; break; }
                   }
                   if (headerIdx < 0 || netosCols.length === 0) continue;
                   for (const col of netosCols) {
-                    let total = 0;
-                    let count = 0;
+                    let total = 0, count = 0;
                     for (let r = headerIdx + 1; r < rows.length; r++) {
                       const row = rows[r] ?? [];
                       if (row.every((x) => x == null || String(x).trim() === "")) continue;
@@ -367,35 +351,23 @@ function serve() {
                   }
                 }
                 if (best && best.total > 0) {
-                  // GSTOCK tiene prioridad: si ya hay valor de GSTOCK, no lo sobrescribimos con palets legacy
                   if (kg_palets_alta_server === null || isGstock) {
                     kg_palets_alta_server = best.total;
-                    sources.kg_palets_alta = {
-                      file: f.file_name,
-                      sheet: best.sheet,
-                      note: `${best.count} filas · columna "Netos"${isGstock ? " (GSTOCK)" : " (palets)"}`,
-                    };
+                    sources.kg_palets_alta = { file: f.file_name, sheet: best.sheet, note: `${best.count} filas · columna "Netos"${isGstock ? " (GSTOCK)" : " (palets)"}` };
                   }
-                  console.log(`[${isGstock ? "gstock" : "palets"}] Netos sum (server) = ${best.total.toFixed(2)} kg (${best.count} rows, col ${best.col}, sheet "${best.sheet}") from ${f.file_name}`);
+                  console.log(`[${isGstock ? "gstock" : "palets"}] Netos sum = ${best.total.toFixed(2)} kg from ${f.file_name}`);
                 }
-              } catch (err) {
-                console.error("Netos sum error", err);
-              }
+              } catch (err) { console.error("Netos sum error", err); }
             }
 
-            // --------- INFORME TAMAÑOS/CLASE/CALIDAD: mujeres (clase L), podrido ---------
+            // TAMAÑOS / CLASE / CALIDAD: mujeres L + podrido
             const isTamanosFile = /tama[ñn]o/i.test(f.file_name) || /clase/i.test(f.file_name) || /calidad/i.test(f.file_name) || /producto/i.test(f.file_name);
             if (wb && isTamanosFile) {
               try {
                 for (const sheetName of wb.SheetNames) {
                   const ws = wb.Sheets[sheetName];
                   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
-
-                  // Detectar headers: necesitamos columna Peso(kg) y opcionalmente Clase y Producto/Variedad
-                  let headerIdx = -1;
-                  let pesoCol = -1;
-                  let claseCol = -1;
-                  let prodCol = -1;
+                  let headerIdx = -1, pesoCol = -1, claseCol = -1, prodCol = -1;
                   for (let r = 0; r < Math.min(rows.length, 40); r++) {
                     const row = rows[r] ?? [];
                     let pc = -1, cc = -1, pr = -1;
@@ -406,16 +378,9 @@ function serve() {
                       if (cc === -1 && (cell === "clase" || cell === "categoria" || cell === "categoría" || cell === "calidad")) cc = c;
                       if (pr === -1 && (cell === "producto" || cell === "variedad" || cell === "denominacion" || cell === "denominación")) pr = c;
                     }
-                    if (pc !== -1) {
-                      headerIdx = r;
-                      pesoCol = pc;
-                      claseCol = cc;
-                      prodCol = pr;
-                      break;
-                    }
+                    if (pc !== -1) { headerIdx = r; pesoCol = pc; claseCol = cc; prodCol = pr; break; }
                   }
                   if (headerIdx < 0 || pesoCol < 0) continue;
-
                   let mujeresL = 0, podrido = 0;
                   for (let r = headerIdx + 1; r < rows.length; r++) {
                     const row = rows[r] ?? [];
@@ -424,15 +389,8 @@ function serve() {
                     const prodVal = prodCol >= 0 ? norm(row[prodCol]) : "";
                     const claseVal = claseCol >= 0 ? norm(row[claseCol]) : "";
                     if (prodVal && /\btotal(es)?\b/.test(prodVal)) continue;
-
-                    // Mujeres = filas con clase exactamente "L"
-                    if (claseCol >= 0 && claseVal === "l") {
-                      mujeresL += kg;
-                    }
-                    // Podrido = filas con producto/variedad "PODRIDO"
-                    if (prodVal === "podrido") {
-                      podrido += kg;
-                    }
+                    if (claseCol >= 0 && claseVal === "l") mujeresL += kg;
+                    if (prodVal === "podrido") podrido += kg;
                   }
                   if (mujeresL > 0) {
                     kg_mujeres_l_server = (kg_mujeres_l_server ?? 0) + mujeresL;
@@ -444,60 +402,41 @@ function serve() {
                   }
                   console.log(`[tamaños] ${f.file_name} "${sheetName}": mujeres(L)=${mujeresL.toFixed(2)} podrido=${podrido.toFixed(2)}`);
                 }
-              } catch (err) {
-                console.error("tamaños/producto parse error", err);
-              }
+              } catch (err) { console.error("tamaños/producto parse error", err); }
             }
 
-            // --------- INFORME_PRODUCCION: kg_produccion_total ---------
+            // INFORME PRODUCCIÓN
             if (wb && /producci[oó]n/i.test(f.file_name) && !/producto/i.test(f.file_name)) {
               try {
                 for (const sheetName of wb.SheetNames) {
                   const ws = wb.Sheets[sheetName];
                   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
-                  const { headerIdx, cols } = findHeader(rows, [
-                    (h) => h === "peso (kg)" || h === "peso(kg)" || h === "peso kg",
-                  ]);
+                  const { headerIdx, cols } = findHeader(rows, [(h) => h === "peso (kg)" || h === "peso(kg)" || h === "peso kg"]);
                   if (headerIdx < 0 || cols[0] < 0) continue;
                   const pesoCol = cols[0];
-                  let lastDetail = 0;
-                  let totalsRow = 0;
+                  let lastDetail = 0, totalsRow = 0;
                   for (let r = headerIdx + 1; r < rows.length; r++) {
                     const row = rows[r] ?? [];
                     const kg = toNum(row[pesoCol]);
                     if (!isFinite(kg) || kg <= 0) continue;
                     const isTotalRow = row.some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
                     if (isTotalRow) { totalsRow = kg; continue; }
-                    lastDetail = kg; // la columna Peso(kg) es acumulada → nos quedamos con el último valor del día
+                    lastDetail = kg;
                   }
                   const total = totalsRow > 0 ? totalsRow : lastDetail;
                   if (total > 0) {
                     kg_produccion_total_server = total;
-                    sources.kg_produccion_total = {
-                      file: f.file_name,
-                      sheet: sheetName,
-                      note: totalsRow > 0 ? 'fila TOTALES · columna Peso (kg)' : "último valor (acumulado) · columna Peso (kg)",
-                    };
-                    console.log(`[produccion] total=${total.toFixed(2)} (lastDetail=${lastDetail.toFixed(2)}, totalsRow=${totalsRow.toFixed(2)}) from ${f.file_name}`);
+                    sources.kg_produccion_total = { file: f.file_name, sheet: sheetName, note: totalsRow > 0 ? "fila TOTALES · columna Peso (kg)" : "último valor · columna Peso (kg)" };
+                    console.log(`[produccion] total=${total.toFixed(2)} from ${f.file_name}`);
                   }
                 }
-              } catch (err) {
-                console.error("produccion parse error", err);
-              }
+              } catch (err) { console.error("produccion parse error", err); }
             }
 
-            // Cap to avoid prompt bloat
-            if (sheetsText.length > 120_000) {
-              sheetsText = sheetsText.slice(0, 120_000) + "\n...[truncado]";
-            }
-            content.push({
-              type: "text",
-              text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}) ---\n${sheetsText}`,
-            });
+            if (sheetsText.length > 120_000) sheetsText = sheetsText.slice(0, 120_000) + "\n...[truncado]";
+            content.push({ type: "text", text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}) ---\n${sheetsText}` });
           }
-        } catch (e) {
-          console.error("File fetch error", f.file_name, e);
-        }
+        } catch (e) { console.error("File fetch error", f.file_name, e); }
       }
 
       const controller = new AbortController();
@@ -506,25 +445,17 @@ function serve() {
       try {
         aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
+          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: sysPrompt },
-              { role: "user", content },
-            ],
+            messages: [{ role: "system", content: sysPrompt }, { role: "user", content }],
             response_format: { type: "json_object" },
           }),
           signal: controller.signal,
         });
       } catch (e: any) {
         clearTimeout(timeoutId);
-        if (e?.name === "AbortError") {
-          return j({ success: false, error: "La IA tardó demasiado (>130s). Prueba con menos archivos o reintenta." }, 504);
-        }
+        if (e?.name === "AbortError") return j({ success: false, error: "La IA tardó demasiado (>130s). Prueba con menos archivos o reintenta." }, 504);
         throw e;
       }
       clearTimeout(timeoutId);
@@ -540,77 +471,44 @@ function serve() {
       const aiJson = await aiResp.json();
       const raw = aiJson?.choices?.[0]?.message?.content ?? "{}";
       let parsed: any = {};
-      try {
-        parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-      } catch {
-        parsed = { analisis: String(raw) };
-      }
+      try { parsed = typeof raw === "string" ? JSON.parse(raw) : raw; }
+      catch { parsed = { analisis: String(raw) }; }
 
-      // Idempotency
       await admin.from("production_runs").delete().eq("part_id", partId);
       await admin.from("gstock_entries").delete().eq("part_id", partId);
       await admin.from("lotes_dia").delete().eq("part_id", partId).eq("source", "ia");
 
       const prodRows = (parsed.produccion ?? []).map((r: any) => ({
-        part_id: partId,
-        user_id: parte.user_id,
-        date: parte.date,
-        product: String(r.product ?? "Desconocido"),
-        size_range: r.size_range ?? null,
-        kg_produced: Number(r.kg_produced) || 0,
-        destination: r.destination ?? null,
+        part_id: partId, user_id: parte.user_id, date: parte.date,
+        product: String(r.product ?? "Desconocido"), size_range: r.size_range ?? null,
+        kg_produced: Number(r.kg_produced) || 0, destination: r.destination ?? null,
       }));
       if (prodRows.length) await admin.from("production_runs").insert(prodRows);
 
       const gstockRows = (parsed.gstock ?? []).map((r: any) => ({
-        part_id: partId,
-        user_id: parte.user_id,
-        date: parte.date,
-        product: String(r.product ?? "Desconocido"),
-        size_range: r.size_range ?? null,
+        part_id: partId, user_id: parte.user_id, date: parte.date,
+        product: String(r.product ?? "Desconocido"), size_range: r.size_range ?? null,
         kg_expected: Number(r.kg_expected) || 0,
       }));
       if (gstockRows.length) await admin.from("gstock_entries").insert(gstockRows);
 
-      const lotesRows = (parsed.lotes ?? [])
-        .filter((l: any) => l.lote_codigo)
-        .map((l: any) => ({
-          part_id: partId,
-          user_id: parte.user_id,
-          lote_codigo: String(l.lote_codigo),
-          producto: l.producto ?? null,
-          source: "ia",
-        }));
+      const lotesRows = (parsed.lotes ?? []).filter((l: any) => l.lote_codigo).map((l: any) => ({
+        part_id: partId, user_id: parte.user_id,
+        lote_codigo: String(l.lote_codigo), producto: l.producto ?? null, source: "ia",
+      }));
       if (lotesRows.length) await admin.from("lotes_dia").insert(lotesRows);
 
-      // ---- Valores autoritativos: preferimos cálculo server-side, fallback a IA ----
-      const kg_produccion_total = round2(
-        kg_produccion_total_server !== null ? kg_produccion_total_server : (Number(parsed.kg_produccion_total) || 0)
-      );
-      const kg_mujeres_l = round2(
-        kg_mujeres_l_server !== null
-          ? kg_mujeres_l_server
-          : (Number(parsed.kg_mujeres_l) || Number(parsed.kg_mujeres_calibrador) || 0)
-      );
-      const kg_podrido_calibrador = round2(
-        kg_podrido_calib_server !== null ? kg_podrido_calib_server : (Number(parsed.kg_podrido_calibrador) || 0)
-      );
-      const kg_palets_alta = round2(
-        kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
-      );
+      const kg_produccion_total = round2(kg_produccion_total_server !== null ? kg_produccion_total_server : (Number(parsed.kg_produccion_total) || 0));
+      const kg_mujeres_l = round2(kg_mujeres_l_server !== null ? kg_mujeres_l_server : (Number(parsed.kg_mujeres_l) || Number(parsed.kg_mujeres_calibrador) || 0));
+      const kg_podrido_calibrador = round2(kg_podrido_calib_server !== null ? kg_podrido_calib_server : (Number(parsed.kg_podrido_calibrador) || 0));
+      const kg_palets_alta = round2(kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0));
 
       const resumen_ia = {
-        kg_produccion_total,
-        kg_palets_alta,
-        kg_mujeres_l,
-        // Aliases para compatibilidad con código antiguo de cascade que aún lee estas claves
-        kg_podrido_server: kg_podrido_calibrador,
-        kg_podrido_calibrador,
-        analisis: parsed.analisis ?? "",
-        sources,
+        kg_produccion_total, kg_palets_alta, kg_mujeres_l,
+        kg_podrido_server: kg_podrido_calibrador, kg_podrido_calibrador,
+        analisis: parsed.analisis ?? "", sources,
       };
 
-      // Auto-rellenamos los campos extraídos del archivo (no son "manuales" reales).
       const updates: Record<string, any> = {
         resumen_ia,
         kg_mujeres_manual: kg_mujeres_l,
@@ -619,8 +517,8 @@ function serve() {
       };
 
       await admin.from("partes_diarios").update(updates).eq("id", partId);
-
       return j({ success: true, resumen_ia });
+
     } catch (e: any) {
       console.error("analizar-parte error", e);
       return j({ success: false, error: e?.message ?? "Unknown" }, 500);
