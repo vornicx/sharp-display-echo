@@ -34,6 +34,7 @@ function buildCascadeFor(p: ParteExportRow) {
     kg_reciclado_malla_z2: p.kg_reciclado_malla_z2,
     kg_podrido_manual: p.kg_podrido_manual,
     kg_inventario_final: p.kg_inventario_final,
+    kg_palets_pendientes_anterior: p.kg_palets_pendientes_anterior ?? 0,
   });
 }
 
