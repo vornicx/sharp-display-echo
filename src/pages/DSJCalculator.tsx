@@ -300,7 +300,7 @@ const DSJCalculator = () => {
               label="Diferencia bruta"
               value={fmt(calc.diferencia_bruta)}
               unit="kg"
-              sub={`${fmtPct(calc.pct_bruta)} sobre producción real`}
+              sub={`${fmtPct(calc.pct_bruta)} sobre producción resumen`}
             />
             <ResultCard
               label="Total mermas"
@@ -311,10 +311,10 @@ const DSJCalculator = () => {
           </div>
 
           <ResultCard
-            label="Diferencia sin justificar"
+            label="Diferencia justificada por podrido y merma natural"
             value={fmt(calc.dsj)}
             unit="kg"
-            sub={`${fmtPct(calc.pct_dsj)} sobre producción real`}
+            sub={`${fmtPct(calc.pct_dsj)} sobre producción resumen`}
             tone={dsjTone}
             emphasis
             icon={<AlertTriangle className="h-6 w-6" />}
