@@ -20,7 +20,7 @@ export const CascadeView = ({ cascade }: { cascade: CascadeOutput }) => {
   // Index where "diferencia bruta" ends (after inventario)
   const inventarioIdx = steps.findIndex((s) => s.key === "inventario");
 
-  const semaforo = semaforoConfig[cascade.semaforo];
+  const semaforo = semaforoConfig[cascade.semaforo ?? "verde"] ?? semaforoConfig.verde;
   const SemaforoIcon = semaforo.icon;
 
   return (
