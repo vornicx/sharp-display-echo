@@ -43,16 +43,16 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
 
   const rows: Row[] = [
     {
-      label: "Producción total",
+      label: "Resumen Calibrador",
       value: Number(r.kg_produccion_total ?? 0),
       origin: "extracted",
       source: s.kg_produccion_total,
     },
     {
-      label: "Industria / Cítricos manual (+)",
+      label: "Industria de la punta (+)",
       value: manual.kg_reciclado_manual,
       origin: "manual",
-      hint: "Se SUMA a producción. Introducido en la pestaña Manual",
+      hint: "Se SUMA al Resumen Calibrador. Introducido en la pestaña Manual",
     },
     {
       label: "Mujeres (L)",
