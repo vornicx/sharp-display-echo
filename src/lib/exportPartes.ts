@@ -44,8 +44,8 @@ function buildSummaryRow(p: ParteExportRow) {
   return {
     Fecha: p.date,
     Estado: p.estado,
-    "Producción total (kg)": num(c.produced),
-    "Industria/Cítricos manual (kg)": num(p.kg_reciclado_manual),
+    "Resumen Calibrador (kg)": num(c.produced),
+    "Industria de la punta (kg)": num(p.kg_reciclado_manual),
     "Mujeres L (kg)": num(Number(p.resumen_ia?.kg_mujeres_l ?? p.kg_mujeres_manual ?? 0)),
     "Palets alta (kg)": num(c.palets),
     "Inventario final (kg)": num(p.kg_inventario_final),
@@ -53,12 +53,12 @@ function buildSummaryRow(p: ParteExportRow) {
     "Podrido calibrador (kg)": num(Number(p.resumen_ia?.kg_podrido_server ?? p.kg_podrido_calibrador_manual ?? 0)),
     "Reciclado malla Z1 (kg)": num(p.kg_reciclado_malla_z1),
     "Reciclado malla Z2 (kg)": num(p.kg_reciclado_malla_z2),
-    "Podrido manual (kg)": num(p.kg_podrido_manual),
+    "Podrido manual bolsa basura (kg)": num(p.kg_podrido_manual),
     "Muestra (kg)": num(muestra),
     "Diferencia bruta (kg)": num(c.grossDiff),
     "Merma total (kg)": num(c.totalShrinkage),
-    "Diferencia sin justificar (kg)": num(c.unjustifiedDiff),
-    "% DSJ": num(c.realDeviationPct),
+    "Dif. justificada por podrido y merma natural (kg)": num(c.unjustifiedDiff),
+    "% Dif. justificada": num(c.realDeviationPct),
     "Notas generales": p.notas_generales ?? "",
     "Notas inventario": p.notas_inventario ?? "",
   };
@@ -135,26 +135,26 @@ export function exportToPDF(partes: ParteExportRow[], from: string, to: string) 
   // Tabla resumen
   const summary = partes.map(buildSummaryRow);
   const head = [[
-    "Fecha", "Estado", "Producción", "+Industria", "−Mujeres L",
+    "Fecha", "Estado", "Resumen Calibrador", "+Industria punta", "−Mujeres L",
     "−Palets", "−Inventario", "−Podrido C.", "−Recic. Z1", "−Recic. Z2",
-    "−Podrido M.", "Dif. bruta", "Merma", "DSJ", "% DSJ",
+    "−Podrido manual b.b.", "Dif. bruta", "Merma", "Dif. just. p./m.n.", "% Dif. just.",
   ]];
   const body = summary.map((r) => [
     r.Fecha,
     r.Estado,
-    r["Producción total (kg)"].toLocaleString("es-ES"),
-    r["Industria/Cítricos manual (kg)"].toLocaleString("es-ES"),
+    r["Resumen Calibrador (kg)"].toLocaleString("es-ES"),
+    r["Industria de la punta (kg)"].toLocaleString("es-ES"),
     r["Mujeres L (kg)"].toLocaleString("es-ES"),
     r["Palets alta (kg)"].toLocaleString("es-ES"),
     r["Inventario final (kg)"].toLocaleString("es-ES"),
     r["Podrido calibrador (kg)"].toLocaleString("es-ES"),
     r["Reciclado malla Z1 (kg)"].toLocaleString("es-ES"),
     r["Reciclado malla Z2 (kg)"].toLocaleString("es-ES"),
-    r["Podrido manual (kg)"].toLocaleString("es-ES"),
+    r["Podrido manual bolsa basura (kg)"].toLocaleString("es-ES"),
     r["Diferencia bruta (kg)"].toLocaleString("es-ES"),
     r["Merma total (kg)"].toLocaleString("es-ES"),
-    r["Diferencia sin justificar (kg)"].toLocaleString("es-ES"),
-    `${r["% DSJ"].toFixed(2)}%`,
+    r["Dif. justificada por podrido y merma natural (kg)"].toLocaleString("es-ES"),
+    `${r["% Dif. justificada"].toFixed(2)}%`,
   ]);
 
   autoTable(doc, {
@@ -182,7 +182,7 @@ export function exportToPDF(partes: ParteExportRow[], from: string, to: string) 
         num(s.value).toLocaleString("es-ES"),
         num(s.running).toLocaleString("es-ES"),
       ]).concat([[
-        "= Diferencia sin justificar", "=",
+        "= Dif. justificada por podrido y merma natural", "=",
         num(c.unjustifiedDiff).toLocaleString("es-ES"),
         `${num(c.realDeviationPct).toFixed(2)}%`,
       ]]),

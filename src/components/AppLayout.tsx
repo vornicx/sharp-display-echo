@@ -63,7 +63,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
 
           <SectionLabel>{t("nav.parts")}</SectionLabel>
           <NavItem to="/partes" icon={FileStack} label={t("nav.parts.list")} />
-          <NavItem to="/dsj" icon={Calculator} label="Calculadora DSJ" />
+          <NavItem to="/dsj" icon={Calculator} label="Calculadora DJPM" />
 
           <SectionLabel>{t("nav.costs")}</SectionLabel>
           <NavItem to="/costes/consumos" icon={Receipt} label={t("nav.costs.consumption")} />
