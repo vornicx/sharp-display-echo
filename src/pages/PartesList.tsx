@@ -35,6 +35,7 @@ interface Row {
   kg_reciclado_malla_z2: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
+  kg_palets_pendientes_anterior: number;
   resumen_ia: any;
 }
 
