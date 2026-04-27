@@ -229,6 +229,8 @@ const en: Dict = {
   "part.field.kg_reciclado_malla_z2": "Mesh recycled zone 2",
   "part.field.kg_podrido_manual": "Manual rotten",
   "part.field.kg_inventario": "Final inventory (pallets not registered)",
+  "part.field.kg_palets_pendientes_anterior": "Pallets not registered from previous day",
+  "part.field.kg_palets_pendientes_anterior.help": "Subtracted from final inventory to avoid double counting",
   "part.field.notas_inventario": "Inventory notes",
   "part.save": "Save",
   "part.saved": "Report saved",
