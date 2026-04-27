@@ -1,10 +1,14 @@
 /**
- * Edge function: analiza un parte diario de Lasarte SAT.
+ * Edge function: analiza un parte diario de Lasarte SAT (DSJ Citrícola).
  *
  * 1. Lee los archivos adjuntos (xlsx, imágenes) del parte.
- * 2. Extrae datos deterministas server-side (GSTOCK, producción, mujeres L, podrido).
- * 3. Envía los datos al modelo IA para análisis cualitativo y extracción de lotes/producción detallada.
- * 4. Calcula la cascada de conciliación completa.
+ * 2. Extrae datos deterministas server-side:
+ *    - Informe_produccion.xlsx → produccion_calibrador_kg
+ *    - Informe_tamanos_clase_calidad_variedad.xlsx → mujeres_kg (clase L)
+ *    - Informe_producto.xlsx → podrido_calibrador_kg
+ *    - palets_DDMMAAAA.xlsx → palets_alta_kg (suma Netos)
+ * 3. Envía datos al modelo IA para análisis cualitativo y extracción de lotes/producción detallada.
+ * 4. Calcula la cascada DSJ completa (producción real → diferencia bruta → DSJ).
  * 5. Persiste todo en resumen_ia y actualiza el estado del parte.
  */
 
@@ -20,7 +24,7 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// ─── Cascade computation (mirrors src/lib/cascade.ts) ───
+// ─── DSJ Cascade computation (mirrors src/lib/cascade.ts) ───
 
 interface CascadeInputs {
   kg_production_total: number;
@@ -35,6 +39,8 @@ interface CascadeInputs {
   kg_palets_pendientes_anterior: number;
 }
 
+type SemaforoLevel = "verde" | "amarillo" | "rojo";
+
 interface CascadeStep {
   key: string;
   label: string;
@@ -46,22 +52,23 @@ interface CascadeStep {
 interface CascadeOutput {
   steps: CascadeStep[];
   produced: number;
-  palets: number;
+  produccionReal: number;
+  paletsAjustados: number;
   grossDiff: number;
   totalShrinkage: number;
   unjustifiedDiff: number;
   realDiff: number;
   deviationPct: number;
   realDeviationPct: number;
+  semaforo: SemaforoLevel;
+  alerts: string[];
 }
 
 function computeCascade(i: CascadeInputs): CascadeOutput {
   const produced = Number(i.kg_production_total) || 0;
   const palets = Number(i.kg_palets_alta) || 0;
-  const invRaw = Number(i.kg_inventario_final) || 0;
-  const pendAnt = Number(i.kg_palets_pendientes_anterior) || 0;
-  const paletsNetos = palets - pendAnt;
-  const inv = invRaw;
+  const invFinal = Number(i.kg_inventario_final) || 0;
+  const invAnterior = Number(i.kg_palets_pendientes_anterior) || 0;
   const mL = Number(i.kg_mujeres_manual) || 0;
   const pc = Number(i.kg_podrido_calibrador_manual) || 0;
   const industria = Number(i.kg_reciclado_manual) || 0;
@@ -69,16 +76,45 @@ function computeCascade(i: CascadeInputs): CascadeOutput {
   const rz2 = Number(i.kg_reciclado_malla_z2) || 0;
   const pm = Number(i.kg_podrido_manual) || 0;
 
+  const produccionReal = produced + industria - mL - rz1 - rz2;
+  const paletsAjustados = palets - invAnterior;
+  const grossDiff = produccionReal - paletsAjustados - invFinal;
+  const totalShrinkage = pc + pm;
+  const unjustifiedDiff = grossDiff - totalShrinkage;
+  const deviationPct = produccionReal > 0 ? (grossDiff / produccionReal) * 100 : 0;
+  const realDeviationPct = produccionReal > 0 ? (unjustifiedDiff / produccionReal) * 100 : 0;
+
+  const semaforo: SemaforoLevel =
+    Math.abs(realDeviationPct) < 1 ? "verde" :
+    Math.abs(realDeviationPct) <= 3 ? "amarillo" : "rojo";
+
+  const alerts: string[] = [];
+  if (palets > produccionReal + invFinal + 1000) {
+    alerts.push("Posible fila TOTAL incluida en palets");
+  }
+  if (unjustifiedDiff < -500) {
+    alerts.push("DSJ negativa: revisar inventario final del día anterior o duplicidades en palets");
+  }
+  if (produccionReal <= 0 && produced > 0) {
+    alerts.push("Producción real <= 0: revisar valores de mujeres y reciclado");
+  }
+  if (produced <= 0) {
+    alerts.push("No se ha podido extraer la producción del calibrador");
+  }
+  if (palets <= 0 && produced > 0) {
+    alerts.push("No se ha podido extraer el peso de palets dados de alta");
+  }
+
   const steps: CascadeStep[] = [
-    { key: "production", label: "Resumen Calibrador", value: produced, isMinus: false, running: 0 },
-    { key: "industria", label: "+ Industria de la punta", value: industria, isMinus: false, running: 0 },
+    { key: "production", label: "Producción calibrador", value: produced, isMinus: false, running: 0 },
+    { key: "industria", label: "+ Industria", value: industria, isMinus: false, running: 0 },
     { key: "mujeres_l", label: "− Mujeres (L)", value: mL, isMinus: true, running: 0 },
-    { key: "palets", label: "− Palets dados de alta (neto − inv. ant.)", value: paletsNetos, isMinus: true, running: 0 },
-    { key: "inventario", label: "− Inventario final día actual", value: inv, isMinus: true, running: 0 },
+    { key: "reciclado_z1", label: "− Reciclado Z1", value: rz1, isMinus: true, running: 0 },
+    { key: "reciclado_z2", label: "− Reciclado Z2", value: rz2, isMinus: true, running: 0 },
+    { key: "palets", label: "− Palets ajustados (alta − inv. ant.)", value: paletsAjustados, isMinus: true, running: 0 },
+    { key: "inventario", label: "− Inventario final", value: invFinal, isMinus: true, running: 0 },
     { key: "podrido_calib", label: "− Podrido calibrador", value: pc, isMinus: true, running: 0 },
-    { key: "reciclado_malla_z1", label: "− Reciclado malla Z1", value: rz1, isMinus: true, running: 0 },
-    { key: "reciclado_malla_z2", label: "− Reciclado malla Z2", value: rz2, isMinus: true, running: 0 },
-    { key: "podrido_manual", label: "− Podrido manual bolsa basura", value: pm, isMinus: true, running: 0 },
+    { key: "podrido_manual", label: "− Podrido manual", value: pm, isMinus: true, running: 0 },
   ];
 
   let running = 0;
@@ -89,23 +125,10 @@ function computeCascade(i: CascadeInputs): CascadeOutput {
     s.running = running;
   });
 
-  const productionAdjusted = produced + industria;
-  const grossDiff = productionAdjusted - mL - paletsNetos - inv;
-  const totalShrinkage = pc + rz1 + rz2 + pm;
-  const unjustifiedDiff = grossDiff - totalShrinkage;
-  const deviationPct = produced > 0 ? (grossDiff / produced) * 100 : 0;
-  const realDeviationPct = produced > 0 ? (unjustifiedDiff / produced) * 100 : 0;
-
   return {
-    steps,
-    produced,
-    palets: paletsNetos,
-    grossDiff,
-    totalShrinkage,
-    unjustifiedDiff,
-    realDiff: unjustifiedDiff,
-    deviationPct,
-    realDeviationPct,
+    steps, produced, produccionReal, paletsAjustados, grossDiff,
+    totalShrinkage, unjustifiedDiff, realDiff: unjustifiedDiff,
+    deviationPct, realDeviationPct, semaforo, alerts,
   };
 }
 
@@ -138,7 +161,7 @@ interface FileMeta {
 
 type Src = { file: string; sheet: string; note?: string };
 
-// ─── AI prompt ───
+// ─── AI prompt (updated for DSJ spec) ───
 
 const sysPrompt = `Eres un analista de la planta de cítricos Lasarte SAT. Extraes datos EXACTOS de archivos del parte diario. NO inventes. NO redondees. NO agrupes a tu criterio.
 
@@ -156,7 +179,7 @@ A) ARCHIVO "Informe_produccion.xlsx" (resumen del calibrador Spectrim)
        NUNCA sumes filas de detalle a mano: usa el total ya impreso.
    → Si solo hay una fila de detalle, ese es el total. Si hay varias, NO las sumes — usa la fila resumen.
 
-B) ARCHIVO "Informe tamaños clase y calidad por variedad" (también puede llamarse "Informe_producto.xlsx" o similar con "tama" / "clase" / "calidad" en el nombre)
+B) ARCHIVO "Informe_tamanos_clase_calidad_variedad.xlsx" (también puede llamarse "Informe_tamanos.xlsx" o similar con "tama" / "clase" / "calidad" en el nombre)
    ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE QUE DEBES EVITAR ⚠️⚠️⚠️
    El archivo tiene MUCHAS columnas. Las relevantes son:
      Variedad | Clase (S/M/L/XL...) | Calibre/Tamaño | Peso(kg) | Empaques | Fruta | ...
@@ -169,19 +192,19 @@ B) ARCHIVO "Informe tamaños clase y calidad por variedad" (también puede llama
 
    Reglas:
      • "kg_mujeres_l" = SUMA de la columna **Peso(kg)** de TODAS las filas cuya columna **Clase** sea
-       exactamente "L" (clase L = "mujeres"). Case-insensitive. Suma TODAS las variedades con clase L.
-       Resultado típico: ~2.000-5.000 kg.
-     • "kg_podrido_calibrador" = **Peso(kg)** de la fila cuyo "Producto" o "Variedad" sea "PODRIDO" (case-insensitive),
-       si existe en este archivo. Si no, déjalo a 0.
-     • "produccion" = lista con TODAS las filas reales de producto (excluye totales). Cada fila:
-       {product, size_range (calibre/tamaño si hay), kg_produced (=Peso(kg) de esa fila), destination}.
+       exactamente "L" o contenga "Mujeres" (clase L = "mujeres"). Case-insensitive. Suma TODAS las variedades con clase L.
+       Resultado típico: ~2.000-7.000 kg.
+       IMPORTANTE: Las mujeres NO son una merma. Se restan de producción porque el calibrador las cuenta dos veces al recalibrarlas.
 
-   VALIDACIÓN: la suma de TODOS los Peso(kg) del informe debe ser aproximadamente igual a kg_produccion_total
-   (diferencia < 1 kg, es redondeo). Si no cuadra, te has equivocado de columna — REVÍSALO.
+C) ARCHIVO "Informe_producto.xlsx" (desglose por producto)
+   → Detectar cabecera con columnas "Producto" y "Peso(kg)".
+   → "kg_podrido_calibrador" = Peso(kg) de la fila donde Producto = "PODRIDO" (case-insensitive, trim).
+   → EXCLUIR filas con Producto = "MUESTRA" o "PREC" — NO entran en DSJ.
+   → Si no hay fila PODRIDO, devolver 0.
 
-C) ARCHIVO GSTOCK (xlsx cuyo file_type es GSTOCK o nombre contiene "gstock" / "g-stock")
+D) ARCHIVO DE PALETS "palets_DDMMAAAA.xlsx" (también puede ser GSTOCK o nombre con "palet")
    ⚠️⚠️⚠️ ATENCIÓN MÁXIMA — ERROR FRECUENTE ⚠️⚠️⚠️
-   El GSTOCK es el archivo de PALETS DADOS DE ALTA (no es solo planificación).
+   El archivo de palets contiene los PALETS DADOS DE ALTA ese día.
    Suele tener una columna llamada **Netos** (peso neto en kg de cada palet, valores típicos 600-900 kg por fila).
 
    ❌ NUNCA sumes "Cajas" (es número de cajas).
@@ -190,13 +213,11 @@ C) ARCHIVO GSTOCK (xlsx cuyo file_type es GSTOCK o nombre contiene "gstock" / "g
    ✅ SIEMPRE usa la columna cuyo header es exactamente "Netos".
 
    → "kg_palets_alta" = SUMA de la columna "Netos" de TODAS las filas con Netos > 0.
+   → EXCLUIR filas resumen/subtotal (TipoCaja = "TOTAL", TipoPalet vacío o null).
    → NO filtres por TipoPalet ni por Sit. Suma TODOS los palets con Netos positivo.
    → Resultado típico de un día normal: 80.000 - 120.000 kg.
 
    → "gstock" = lista {product, size_range, kg_expected} para descuadres por producto (informativo).
-
-D) ARCHIVO DE PALETS antiguo (xlsx cuyo NOMBRE contiene "palet" pero NO es GSTOCK)
-   → Solo se usa como FALLBACK si no hay archivo GSTOCK. Misma regla: suma columna "Netos".
 
 E) FOTO DE LOTES (imagen)
    → "lotes" = [{lote_codigo, producto?}] con los códigos visibles.
@@ -219,12 +240,13 @@ REGLAS FINALES:
 - Si un archivo no existe, devuelve 0 / lista vacía.
 - NO inventes valores. NO calcules medias.
 - Mantén los decimales tal cual aparecen en los archivos.
-- Las cantidades manuales (reciclado manual, malla Z1, malla Z2, podrido manual, inventario final)
+- Las cantidades manuales (industria, reciclado Z1, reciclado Z2, podrido manual, inventario final)
   NUNCA las extraigas: las introduce el operario. NO las incluyas en el JSON.
 - ANTES de devolver el JSON, VERIFICA mentalmente:
     · ¿He usado la columna "Peso(kg)" en el informe de tamaños/clase (no "Fruta" ni "Empaques")?
-    · ¿He sumado SOLO las filas con Clase = "L" para kg_mujeres_l?
-    · ¿He usado la columna "Netos" del GSTOCK para kg_palets_alta?
+    · ¿He sumado SOLO las filas con Clase = "L" o "Mujeres" para kg_mujeres_l?
+    · ¿He usado la columna "Netos" del archivo de palets para kg_palets_alta?
+    · ¿He EXCLUIDO "MUESTRA" y "PREC" del informe de producto?
     · ¿kg_palets_alta está en el rango 50.000-150.000 (no en miles bajos)?
   Si alguna respuesta es NO, CORRIGE antes de responder.`;
 
@@ -253,7 +275,6 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    // Fetch parte with all manual fields
     const { data: parte, error: pErr } = await admin
       .from("partes_diarios")
       .select("*")
@@ -266,7 +287,6 @@ Deno.serve(async (req: Request) => {
       if (!isAdmin) return j({ success: false, error: "Forbidden" }, 403);
     }
 
-    // Fetch attached files
     const { data: archivos } = await admin
       .from("partes_archivos")
       .select("id, file_name, file_path, file_type, mime_type")
@@ -288,7 +308,6 @@ Deno.serve(async (req: Request) => {
       kg_podrido_calibrador: null,
     };
 
-    // AI content parts
     const content: { type: string; text?: string; image_url?: { url: string } }[] = [
       {
         type: "text",
@@ -312,7 +331,6 @@ Deno.serve(async (req: Request) => {
       return { headerIdx: -1, cols: matchers.map(() => -1) };
     };
 
-    // Process each file
     for (const f of files) {
       try {
         const { data: signed } = await admin.storage
@@ -334,11 +352,10 @@ Deno.serve(async (req: Request) => {
           content.push({ type: "text", text: `--- Archivo: ${f.file_name} (tipo: ${f.file_type}) ---` });
           content.push({ type: "image_url", image_url: { url: `data:${f.mime_type};base64,${b64}` } });
         } else {
-          // Parse xlsx
           const resp = await fetch(signed.signedUrl);
           let buf = new Uint8Array(await resp.arrayBuffer());
 
-          // Repair xlsx with garbage prefix (PK00)
+          // Repair xlsx with garbage prefix
           const looksXlsxName = /\.(xlsx|xlsm)$/i.test(f.file_name);
           if (looksXlsxName && buf.length > 22) {
             const startsPK = buf[0] === 0x50 && buf[1] === 0x4b;
@@ -348,8 +365,7 @@ Deno.serve(async (req: Request) => {
               let cut = -1;
               for (let i = 1; i < search; i++) {
                 if (buf[i] === 0x50 && buf[i + 1] === 0x4b && buf[i + 2] === 0x03 && buf[i + 3] === 0x04) {
-                  cut = i;
-                  break;
+                  cut = i; break;
                 }
               }
               if (cut > 0) {
@@ -396,10 +412,11 @@ Deno.serve(async (req: Request) => {
             sheetsText = `[No se pudo parsear ${f.file_name}]`;
           }
 
-          // ── GSTOCK / PALETS: deterministic "Netos" sum ──
+          // ── PALETS: deterministic "Netos" sum ──
+          // Matches: file_type=GSTOCK, or name contains "gstock"/"palet"
           const isGstock = f.file_type === "GSTOCK" || /g[\s_-]?stock/i.test(f.file_name);
-          const isPaletsLegacy = !isGstock && /palet/i.test(f.file_name);
-          if (wb && (isGstock || isPaletsLegacy)) {
+          const isPalets = !isGstock && /palet/i.test(f.file_name);
+          if (wb && (isGstock || isPalets)) {
             try {
               let best: { total: number; count: number; col: number; sheet: string } | null = null;
               for (const sheetName of wb.SheetNames) {
@@ -407,23 +424,35 @@ Deno.serve(async (req: Request) => {
                 const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
                 let headerIdx = -1;
                 let netosCols: number[] = [];
+                let tipoCajaCol = -1;
+                let tipoPaletCol = -1;
                 for (let r = 0; r < Math.min(rows.length, 40); r++) {
                   const row = rows[r] ?? [];
                   const cols: number[] = [];
+                  let tc = -1, tp = -1;
                   for (let c = 0; c < row.length; c++) {
                     const cell = norm(row[c]);
                     if (cell === "netos" || cell === "neto" || cell === "kg netos" || cell === "peso neto") cols.push(c);
+                    if (tc === -1 && (cell === "tipocaja" || cell === "tipo caja")) tc = c;
+                    if (tp === -1 && (cell === "tipopalet" || cell === "tipo palet")) tp = c;
                   }
-                  if (cols.length > 0) { headerIdx = r; netosCols = cols; break; }
+                  if (cols.length > 0) {
+                    headerIdx = r; netosCols = cols; tipoCajaCol = tc; tipoPaletCol = tp; break;
+                  }
                 }
                 if (headerIdx < 0 || netosCols.length === 0) continue;
                 for (const col of netosCols) {
                   let total = 0, count = 0;
                   for (let r = headerIdx + 1; r < rows.length; r++) {
-                    const row = rows[r] ?? [];
-                    if ((row as unknown[]).every((x) => x == null || String(x).trim() === "")) continue;
-                    const isTotalRow = (row as unknown[]).some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
+                    const row = rows[r] as unknown[];
+                    if (row.every((x) => x == null || String(x).trim() === "")) continue;
+                    // Exclude subtotal/total rows
+                    const isTotalRow = row.some((x) => /\b(sub)?total(es)?\b/i.test(String(x ?? "")));
                     if (isTotalRow) continue;
+                    // Exclude TipoCaja = "TOTAL"
+                    if (tipoCajaCol >= 0 && norm(row[tipoCajaCol]) === "total") continue;
+                    // Exclude TipoPalet empty/null (summary rows)
+                    if (tipoPaletCol >= 0 && !norm(row[tipoPaletCol])) continue;
                     const n = toNum(row[col]);
                     if (isFinite(n) && n > 0) { total += n; count += 1; }
                   }
@@ -446,8 +475,8 @@ Deno.serve(async (req: Request) => {
             }
           }
 
-          // ── INFORME TAMAÑOS/CLASE/CALIDAD: mujeres (clase L), podrido ──
-          const isTamanosFile = /tama[ñn]o/i.test(f.file_name) || /clase/i.test(f.file_name) || /calidad/i.test(f.file_name) || /producto/i.test(f.file_name);
+          // ── INFORME TAMAÑOS/CLASE/CALIDAD: mujeres (clase L) ──
+          const isTamanosFile = /tama[ñn]o/i.test(f.file_name) || /clase/i.test(f.file_name) || /calidad/i.test(f.file_name);
           if (wb && isTamanosFile) {
             try {
               for (const sheetName of wb.SheetNames) {
@@ -469,7 +498,7 @@ Deno.serve(async (req: Request) => {
                 }
                 if (headerIdx < 0 || pesoCol < 0) continue;
 
-                let mujeresL = 0, podrido = 0;
+                let mujeresL = 0;
                 for (let r = headerIdx + 1; r < rows.length; r++) {
                   const row = rows[r] as unknown[];
                   const kg = toNum(row[pesoCol]);
@@ -477,25 +506,68 @@ Deno.serve(async (req: Request) => {
                   const prodVal = prodCol >= 0 ? norm(row[prodCol]) : "";
                   const claseVal = claseCol >= 0 ? norm(row[claseCol]) : "";
                   if (prodVal && /\btotal(es)?\b/.test(prodVal)) continue;
-                  if (claseCol >= 0 && claseVal === "l") mujeresL += kg;
-                  if (prodVal === "podrido") podrido += kg;
+                  // Clase L or contains "mujeres"
+                  if (claseCol >= 0 && (claseVal === "l" || claseVal.includes("mujeres"))) {
+                    mujeresL += kg;
+                  }
                 }
                 if (mujeresL > 0) {
                   kg_mujeres_l_server = (kg_mujeres_l_server ?? 0) + mujeresL;
-                  sources.kg_mujeres_l = { file: f.file_name, sheet: sheetName, note: 'filas con Clase="L" · columna Peso(kg)' };
+                  sources.kg_mujeres_l = { file: f.file_name, sheet: sheetName, note: 'filas con Clase="L" o "Mujeres" · columna Peso(kg)' };
                 }
-                if (podrido > 0) {
-                  kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
-                  sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg)' };
-                }
-                console.log(`[tamaños] ${f.file_name} "${sheetName}": mujeres(L)=${mujeresL.toFixed(2)} podrido=${podrido.toFixed(2)}`);
+                console.log(`[tamaños] ${f.file_name} "${sheetName}": mujeres(L)=${mujeresL.toFixed(2)}`);
               }
             } catch (err) {
-              console.error("tamaños/producto parse error", err);
+              console.error("tamaños parse error", err);
             }
           }
 
-          // ── INFORME_PRODUCCION: kg_produccion_total ──
+          // ── INFORME PRODUCTO: podrido calibrador ──
+          const isProductoFile = /producto/i.test(f.file_name) && !/producci[oó]n/i.test(f.file_name);
+          if (wb && isProductoFile) {
+            try {
+              for (const sheetName of wb.SheetNames) {
+                const ws = wb.Sheets[sheetName];
+                const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: null });
+
+                let headerIdx = -1, pesoCol = -1, prodCol = -1;
+                for (let r = 0; r < Math.min(rows.length, 40); r++) {
+                  const row = rows[r] ?? [];
+                  let pc = -1, pr = -1;
+                  for (let c = 0; c < row.length; c++) {
+                    const cell = norm(row[c]);
+                    if (!cell) continue;
+                    if (pc === -1 && (cell === "peso(kg)" || cell === "peso (kg)" || cell === "peso kg" || cell === "peso")) pc = c;
+                    if (pr === -1 && (cell === "producto" || cell === "variedad" || cell === "denominacion" || cell === "denominación")) pr = c;
+                  }
+                  if (pc !== -1 && pr !== -1) { headerIdx = r; pesoCol = pc; prodCol = pr; break; }
+                }
+                if (headerIdx < 0 || pesoCol < 0 || prodCol < 0) continue;
+
+                let podrido = 0;
+                for (let r = headerIdx + 1; r < rows.length; r++) {
+                  const row = rows[r] as unknown[];
+                  const kg = toNum(row[pesoCol]);
+                  if (!isFinite(kg)) continue;
+                  const prodVal = norm(row[prodCol]);
+                  if (/\btotal(es)?\b/.test(prodVal)) continue;
+                  // Only PODRIDO — exclude MUESTRA and PREC
+                  if (prodVal === "podrido") {
+                    podrido += kg;
+                  }
+                }
+                if (podrido > 0) {
+                  kg_podrido_calib_server = (kg_podrido_calib_server ?? 0) + podrido;
+                  sources.kg_podrido_calibrador = { file: f.file_name, sheet: sheetName, note: 'fila "PODRIDO" · columna Peso(kg) (excluidos MUESTRA y PREC)' };
+                }
+                console.log(`[producto] ${f.file_name} "${sheetName}": podrido=${podrido.toFixed(2)}`);
+              }
+            } catch (err) {
+              console.error("producto parse error", err);
+            }
+          }
+
+          // ── INFORME PRODUCCION: kg_produccion_total ──
           if (wb && /producci[oó]n/i.test(f.file_name) && !/producto/i.test(f.file_name)) {
             try {
               for (const sheetName of wb.SheetNames) {
@@ -531,7 +603,6 @@ Deno.serve(async (req: Request) => {
             }
           }
 
-          // Cap text to avoid prompt bloat
           if (sheetsText.length > 120_000) {
             sheetsText = sheetsText.slice(0, 120_000) + "\n...[truncado]";
           }
@@ -545,7 +616,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ─── Call AI for qualitative analysis + lotes/produccion detail ───
+    // ─── Call AI ───
 
     let parsed: Record<string, unknown> = {};
     try {
@@ -561,7 +632,6 @@ Deno.serve(async (req: Request) => {
     } catch (e: unknown) {
       const err = e as Error;
       console.error("AI call failed:", err.message);
-      // Continue without AI — we still have deterministic values
     }
 
     // ─── Merge: prefer server-side deterministic values, fallback to AI ───
@@ -581,7 +651,7 @@ Deno.serve(async (req: Request) => {
       kg_palets_alta_server !== null ? kg_palets_alta_server : (Number(parsed.kg_palets_alta) || 0)
     );
 
-    // ─── Compute cascade ───
+    // ─── Compute DSJ cascade ───
 
     const cascade = computeCascade({
       kg_production_total: kg_produccion_total,
@@ -598,7 +668,6 @@ Deno.serve(async (req: Request) => {
 
     // ─── Persist production_runs, gstock_entries, lotes_dia ───
 
-    // Idempotency: clear previous AI-generated rows
     await admin.from("production_runs").delete().eq("part_id", partId);
     await admin.from("gstock_entries").delete().eq("part_id", partId);
     await admin.from("lotes_dia").delete().eq("part_id", partId).eq("source", "ia");
@@ -649,7 +718,7 @@ Deno.serve(async (req: Request) => {
     const hasExtractedData = kg_produccion_total > 0 || kg_palets_alta > 0;
     const estado = !hasExtractedData
       ? "Borrador"
-      : Math.abs(cascade.realDeviationPct) > 3
+      : cascade.semaforo === "rojo"
         ? "Con descuadre"
         : "Analizado";
 
@@ -672,13 +741,16 @@ Deno.serve(async (req: Request) => {
           isMinus: s.isMinus,
         })),
         produced: cascade.produced,
-        palets: cascade.palets,
+        produccionReal: cascade.produccionReal,
+        paletsAjustados: cascade.paletsAjustados,
         grossDiff: cascade.grossDiff,
         totalShrinkage: cascade.totalShrinkage,
         unjustifiedDiff: cascade.unjustifiedDiff,
         realDiff: cascade.realDiff,
         deviationPct: cascade.deviationPct,
         realDeviationPct: cascade.realDeviationPct,
+        semaforo: cascade.semaforo,
+        alerts: cascade.alerts,
       },
     };
 
@@ -706,7 +778,6 @@ Deno.serve(async (req: Request) => {
 async function fetchAI(content: unknown[]) {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-  // Try Lovable AI Gateway first
   if (LOVABLE_API_KEY) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 130_000);
@@ -744,47 +815,24 @@ async function fetchAI(content: unknown[]) {
     }
   }
 
-  // Fallback: try Supabase AI (built-in)
-  try {
-    const model = new Supabase.ai.Session("gte-small");
-    // Note: gte-small is an embedding model, not a chat model.
-    // For chat, we'd need a different approach. Return minimal analysis.
-    console.log("[ai-fallback] No LOVABLE_API_KEY configured. Returning deterministic-only results.");
-    return {
-      choices: [{
-        message: {
-          content: JSON.stringify({
-            kg_produccion_total: 0,
-            kg_mujeres_l: 0,
-            kg_podrido_calibrador: 0,
-            kg_palets_alta: 0,
-            produccion: [],
-            gstock: [],
-            lotes: [],
-            analisis: "Análisis determinista completado (sin IA conversacional). Los valores numéricos se han extraído directamente de los archivos. Configura LOVABLE_API_KEY para obtener análisis cualitativo y extracción de lotes desde fotos.",
-          }),
-        },
-      }],
-    };
-  } catch {
-    console.log("[ai-fallback] Supabase AI not available. Returning deterministic-only results.");
-    return {
-      choices: [{
-        message: {
-          content: JSON.stringify({
-            kg_produccion_total: 0,
-            kg_mujeres_l: 0,
-            kg_podrido_calibrador: 0,
-            kg_palets_alta: 0,
-            produccion: [],
-            gstock: [],
-            lotes: [],
-            analisis: "Análisis determinista completado (sin IA). Los valores numéricos se han extraído directamente de los archivos. Configura LOVABLE_API_KEY para obtener análisis cualitativo.",
-          }),
-        },
-      }],
-    };
-  }
+  // Fallback: deterministic-only results
+  console.log("[ai-fallback] No LOVABLE_API_KEY configured. Returning deterministic-only results.");
+  return {
+    choices: [{
+      message: {
+        content: JSON.stringify({
+          kg_produccion_total: 0,
+          kg_mujeres_l: 0,
+          kg_podrido_calibrador: 0,
+          kg_palets_alta: 0,
+          produccion: [],
+          gstock: [],
+          lotes: [],
+          analisis: "Análisis determinista completado (sin IA conversacional). Los valores numéricos se han extraído directamente de los archivos. Configura LOVABLE_API_KEY para obtener análisis cualitativo y extracción de lotes desde fotos.",
+        }),
+      },
+    }],
+  };
 }
 
 function j(body: unknown, status = 200) {

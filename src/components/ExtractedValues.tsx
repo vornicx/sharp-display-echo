@@ -1,6 +1,7 @@
 import { FileSpreadsheet, User, TrendingDown, TrendingUp, TriangleAlert as AlertTriangle } from "lucide-react";
 import { fmtKg, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { SemaforoLevel } from "@/lib/cascade";
 
 interface Source {
   file?: string;
@@ -29,12 +30,27 @@ interface Props {
   };
 }
 
+const semaforoColors: Record<SemaforoLevel, { bg: string; border: string; text: string; icon: string }> = {
+  verde: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", icon: "text-emerald-600" },
+  amarillo: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", icon: "text-amber-600" },
+  rojo: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700", icon: "text-red-600" },
+};
+
 export const ExtractedValues = ({ resumenIa, manual }: Props) => {
   const r = resumenIa ?? {};
   const s = (r.sources ?? {}) as Record<string, Source | null>;
-  const cascade = r.cascade as { grossDiff: number; unjustifiedDiff: number; deviationPct: number; realDeviationPct: number; totalShrinkage: number } | undefined;
+  const cascade = r.cascade as {
+    produccionReal: number;
+    paletsAjustados: number;
+    grossDiff: number;
+    totalShrinkage: number;
+    unjustifiedDiff: number;
+    deviationPct: number;
+    realDeviationPct: number;
+    semaforo: SemaforoLevel;
+    alerts: string[];
+  } | undefined;
 
-  // Mujeres (L) — preferir el valor extraído de IA si existe, si no el manual
   const mujeresLExtracted = r.kg_mujeres_l ?? r.kg_mujeres_calibrador ?? null;
   const mujeresLValue = mujeresLExtracted != null
     ? Number(mujeresLExtracted)
@@ -44,23 +60,35 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
 
   const rows: Row[] = [
     {
-      label: "Resumen Calibrador",
+      label: "Producción calibrador",
       value: Number(r.kg_produccion_total ?? 0),
       origin: "extracted",
       source: s.kg_produccion_total,
     },
     {
-      label: "Industria de la punta (+)",
+      label: "+ Industria",
       value: manual.kg_reciclado_manual,
       origin: "manual",
-      hint: "Se SUMA al Resumen Calibrador. Introducido en la pestaña Manual",
+      hint: "Kg de cítricos/industria procesados manualmente. Se SUMA a la producción del calibrador.",
     },
     {
-      label: "Mujeres (L)",
+      label: "− Mujeres (L)",
       value: mujeresLValue,
       origin: mujeresLOrigin,
       source: mujeresLSource,
-      hint: "Clase L del informe de tamaños — dato duplicado, se resta",
+      hint: "Clase L del informe de tamaños. Se resta porque el calibrador las cuenta dos veces al recalibrarlas.",
+    },
+    {
+      label: "− Reciclado Z1",
+      value: manual.kg_reciclado_malla_z1,
+      origin: "manual",
+      hint: "Boxes azules reprocesados Zona 1. Se restan porque el calibrador los pesa de nuevo al día siguiente.",
+    },
+    {
+      label: "− Reciclado Z2",
+      value: manual.kg_reciclado_malla_z2,
+      origin: "manual",
+      hint: "Boxes azules reprocesados Zona 2. Se restan porque el calibrador los pesa de nuevo al día siguiente.",
     },
     {
       label: "Palets dados de alta",
@@ -69,45 +97,33 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
       source: s.kg_palets_alta,
     },
     {
-      label: "Inventario final",
-      value: manual.kg_inventario_final,
-      origin: "manual",
-      hint: "Introducido en la pestaña Manual",
-    },
-    {
-      label: "Palets sin alta del día anterior (−)",
+      label: "− Inv. día anterior",
       value: Number(manual.kg_palets_pendientes_anterior ?? 0),
       origin: "manual",
-      hint: "Se RESTA al inventario final para no contarlos dos veces",
+      hint: "Inventario final del día anterior. Se resta de los palets para no contar producción de ayer.",
     },
     {
-      label: "Podrido calibrador",
+      label: "− Inventario final",
+      value: manual.kg_inventario_final,
+      origin: "manual",
+      hint: "Palets producidos hoy que NO se han dado de alta aún.",
+    },
+    {
+      label: "− Podrido calibrador",
       value: Number(r.kg_podrido_calibrador ?? 0),
       origin: "extracted",
       source: s.kg_podrido_calibrador,
     },
     {
-      label: "Reciclado malla Z1",
-      value: manual.kg_reciclado_malla_z1,
-      origin: "manual",
-      hint: "Introducido en la pestaña Manual",
-    },
-    {
-      label: "Reciclado malla Z2",
-      value: manual.kg_reciclado_malla_z2,
-      origin: "manual",
-      hint: "Introducido en la pestaña Manual",
-    },
-    {
-      label: "Podrido manual bolsa basura",
+      label: "− Podrido manual",
       value: manual.kg_podrido_manual,
       origin: "manual",
-      hint: "Introducido en la pestaña Manual",
+      hint: "Podrido retirado manualmente en el volcador.",
     },
   ];
 
-  const hasCascade = cascade && (cascade.grossDiff !== 0 || cascade.unjustifiedDiff !== 0);
-  const isDescuadre = hasCascade && Math.abs(cascade.realDeviationPct) > 3;
+  const hasCascade = cascade && (cascade.produccionReal > 0);
+  const semaforo = cascade?.semaforo ? semaforoColors[cascade.semaforo] : null;
 
   return (
     <div>
@@ -178,10 +194,17 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
         })}
       </div>
 
-      {hasCascade && (
+      {hasCascade && cascade && (
         <div className="mt-4 pt-4 border-t border-border space-y-3">
-          <h4 className="text-sm font-semibold text-foreground">Resultado de la cascada</h4>
+          <h4 className="text-sm font-semibold text-foreground">Resultado DSJ</h4>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <CascadeSummaryCard
+              label="Producción real"
+              value={cascade.produccionReal}
+              unit="kg"
+              icon={<TrendingUp className="h-4 w-4" />}
+              variant="neutral"
+            />
             <CascadeSummaryCard
               label="Diferencia bruta"
               value={cascade.grossDiff}
@@ -190,28 +213,48 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
               variant={Math.abs(cascade.deviationPct) > 3 ? "warning" : "neutral"}
             />
             <CascadeSummaryCard
-              label="Merma total"
+              label="Mermas totales"
               value={cascade.totalShrinkage}
               unit="kg"
               icon={<TrendingDown className="h-4 w-4" />}
               variant="neutral"
             />
             <CascadeSummaryCard
-              label="Diferencia sin justificar"
+              label="DSJ"
               value={cascade.unjustifiedDiff}
               unit="kg"
-              icon={isDescuadre ? <AlertTriangle className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
-              variant={isDescuadre ? "danger" : "success"}
-            />
-            <CascadeSummaryCard
-              label="% Desviación real"
-              value={cascade.realDeviationPct}
-              unit="%"
-              icon={isDescuadre ? <AlertTriangle className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
-              variant={isDescuadre ? "danger" : "success"}
-              isPercent
+              icon={cascade.semaforo === "rojo" ? <AlertTriangle className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
+              variant={cascade.semaforo === "verde" ? "success" : cascade.semaforo === "amarillo" ? "warning" : "danger"}
             />
           </div>
+
+          {/* Semaforo badge */}
+          {semaforo && (
+            <div className={cn("flex items-center justify-between rounded-lg border px-4 py-3", semaforo.bg, semaforo.border)}>
+              <div className="flex items-center gap-2">
+                <span className={cn("font-semibold text-sm", semaforo.text)}>
+                  % DSJ: {fmtPct(cascade.realDeviationPct)}
+                </span>
+              </div>
+              <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold", semaforo.bg, semaforo.border, semaforo.text)}>
+                {cascade.semaforo === "verde" && "Correcto (< 1%)"}
+                {cascade.semaforo === "amarillo" && "Atención (1-3%)"}
+                {cascade.semaforo === "rojo" && "Revisar (> 3%)"}
+              </div>
+            </div>
+          )}
+
+          {/* Alerts */}
+          {cascade.alerts.length > 0 && (
+            <div className="space-y-1.5">
+              {cascade.alerts.map((alert, i) => (
+                <div key={i} className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>{alert}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -224,14 +267,12 @@ const CascadeSummaryCard = ({
   unit,
   icon,
   variant,
-  isPercent,
 }: {
   label: string;
   value: number;
   unit: string;
   icon: React.ReactNode;
   variant: "neutral" | "success" | "warning" | "danger";
-  isPercent?: boolean;
 }) => {
   const colorMap = {
     neutral: "bg-muted text-muted-foreground",
@@ -253,7 +294,7 @@ const CascadeSummaryCard = ({
         <span className="text-xs font-medium opacity-80">{label}</span>
       </div>
       <div className="font-mono font-bold text-lg tabular-nums">
-        {isPercent ? fmtPct(value) : fmtKg(value)}
+        {fmtKg(value)}
         <span className="ml-1 text-xs font-normal opacity-70">{unit}</span>
       </div>
     </div>

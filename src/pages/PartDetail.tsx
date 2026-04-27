@@ -105,13 +105,16 @@ const PartDetail = () => {
           isMinus: s.isMinus,
         })),
         produced: c.produced,
-        palets: c.palets,
+        produccionReal: c.produccionReal,
+        paletsAjustados: c.paletsAjustados,
         grossDiff: c.grossDiff,
         totalShrinkage: c.totalShrinkage,
         unjustifiedDiff: c.unjustifiedDiff,
         realDiff: c.realDiff,
         deviationPct: c.deviationPct,
         realDeviationPct: c.realDeviationPct,
+        semaforo: c.semaforo,
+        alerts: c.alerts ?? [],
       } as CascadeOutput;
     }
     // Fallback: compute client-side

@@ -3,31 +3,33 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Calculator, RotateCcw, AlertTriangle, TrendingDown, Package, Scale } from "lucide-react";
+import { Calculator, RotateCcw, TriangleAlert as AlertTriangle, TrendingDown, Package, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Fields = {
   produccion_calibrador_kg: string;
+  industria_kg: string;
   mujeres_kg: string;
+  reciclado_z1_kg: string;
+  reciclado_z2_kg: string;
   palets_alta_kg: string;
+  inventario_anterior_kg: string;
   inventario_final_kg: string;
   podrido_calibrador_kg: string;
   podrido_manual_kg: string;
-  podrido_cinta_kg: string;
-  reciclado_z1_kg: string;
-  reciclado_z2_kg: string;
 };
 
 const empty: Fields = {
   produccion_calibrador_kg: "",
+  industria_kg: "",
   mujeres_kg: "",
+  reciclado_z1_kg: "",
+  reciclado_z2_kg: "",
   palets_alta_kg: "",
+  inventario_anterior_kg: "",
   inventario_final_kg: "",
   podrido_calibrador_kg: "",
   podrido_manual_kg: "",
-  podrido_cinta_kg: "",
-  reciclado_z1_kg: "",
-  reciclado_z2_kg: "",
 };
 
 const parseNum = (v: string): number => {
@@ -153,23 +155,26 @@ const DSJCalculator = () => {
 
   const calc = useMemo(() => {
     const prodCal = parseNum(f.produccion_calibrador_kg);
+    const industria = parseNum(f.industria_kg);
     const muj = parseNum(f.mujeres_kg);
+    const rZ1 = parseNum(f.reciclado_z1_kg);
+    const rZ2 = parseNum(f.reciclado_z2_kg);
     const palets = parseNum(f.palets_alta_kg);
+    const invAnt = parseNum(f.inventario_anterior_kg);
     const inv = parseNum(f.inventario_final_kg);
     const podCal = parseNum(f.podrido_calibrador_kg);
     const podMan = parseNum(f.podrido_manual_kg);
-    const podCin = parseNum(f.podrido_cinta_kg);
-    const rZ1 = parseNum(f.reciclado_z1_kg);
-    const rZ2 = parseNum(f.reciclado_z2_kg);
 
-    const produccion_real = prodCal - muj;
-    const diferencia_bruta = produccion_real - palets - inv;
-    const mermas_total = podCal + podMan + podCin + rZ1 + rZ2;
+    // DSJ spec v3
+    const produccion_real = prodCal + industria - muj - rZ1 - rZ2;
+    const palets_ajustados = palets - invAnt;
+    const diferencia_bruta = produccion_real - palets_ajustados - inv;
+    const mermas_total = podCal + podMan;
     const dsj = diferencia_bruta - mermas_total;
     const pct_bruta = produccion_real > 0 ? (diferencia_bruta / produccion_real) * 100 : 0;
     const pct_dsj = produccion_real > 0 ? (dsj / produccion_real) * 100 : 0;
 
-    return { produccion_real, diferencia_bruta, mermas_total, dsj, pct_bruta, pct_dsj };
+    return { produccion_real, palets_ajustados, diferencia_bruta, mermas_total, dsj, pct_bruta, pct_dsj };
   }, [f]);
 
   const dsjTone: "success" | "warning" | "destructive" = (() => {
@@ -213,18 +218,48 @@ const DSJCalculator = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumberField
                 id="produccion_calibrador_kg"
-                label="Resumen Calibrador (kg)"
+                label="Producción calibrador (kg)"
                 value={f.produccion_calibrador_kg}
                 onChange={update("produccion_calibrador_kg")}
                 hint="Peso total reportado por el calibrador"
               />
               <NumberField
+                id="industria_kg"
+                label="+ Industria (kg)"
+                value={f.industria_kg}
+                onChange={update("industria_kg")}
+                hint="Kg de cítricos/industria procesados manualmente"
+              />
+              <NumberField
                 id="mujeres_kg"
-                label="Mujeres — clase L (kg)"
+                label="− Mujeres — clase L (kg)"
                 value={f.mujeres_kg}
                 onChange={update("mujeres_kg")}
-                hint="Se restan: el calibrador las cuenta dos veces"
+                hint="Se restan: el calibrador las cuenta dos veces al recalibrarlas"
               />
+              <NumberField
+                id="reciclado_z1_kg"
+                label="− Reciclado Z1 (kg)"
+                value={f.reciclado_z1_kg}
+                onChange={update("reciclado_z1_kg")}
+                hint="Boxes azules reprocesados Zona 1. Se restan de producción."
+              />
+              <NumberField
+                id="reciclado_z2_kg"
+                label="− Reciclado Z2 (kg)"
+                value={f.reciclado_z2_kg}
+                onChange={update("reciclado_z2_kg")}
+                hint="Boxes azules reprocesados Zona 2. Se restan de producción."
+              />
+            </div>
+          </Card>
+
+          <Card className="p-5 sm:p-6 shadow-card">
+            <div className="flex items-center gap-2 mb-4">
+              <Package className="h-4 w-4 text-primary-strong" />
+              <h2 className="text-base font-semibold">2. Palets e inventario</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumberField
                 id="palets_alta_kg"
                 label="Palets dados de alta (kg)"
@@ -233,11 +268,18 @@ const DSJCalculator = () => {
                 hint="Suma de Netos de palets dados de alta"
               />
               <NumberField
+                id="inventario_anterior_kg"
+                label="− Inv. día anterior (kg)"
+                value={f.inventario_anterior_kg}
+                onChange={update("inventario_anterior_kg")}
+                hint="Inventario final del día anterior. Se resta de los palets."
+              />
+              <NumberField
                 id="inventario_final_kg"
-                label="Inventario final (kg)"
+                label="− Inventario final (kg)"
                 value={f.inventario_final_kg}
                 onChange={update("inventario_final_kg")}
-                hint="Producido hoy sin dar de alta aún"
+                hint="Palets producidos hoy sin dar de alta aún"
               />
             </div>
           </Card>
@@ -245,7 +287,7 @@ const DSJCalculator = () => {
           <Card className="p-5 sm:p-6 shadow-card">
             <div className="flex items-center gap-2 mb-4">
               <TrendingDown className="h-4 w-4 text-primary-strong" />
-              <h2 className="text-base font-semibold">2. Mermas identificadas</h2>
+              <h2 className="text-base font-semibold">3. Mermas justificadas</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumberField
@@ -256,29 +298,9 @@ const DSJCalculator = () => {
               />
               <NumberField
                 id="podrido_manual_kg"
-                label="Podrido manual bolsa basura (kg)"
+                label="Podrido manual / volcador (kg)"
                 value={f.podrido_manual_kg}
                 onChange={update("podrido_manual_kg")}
-              />
-              <NumberField
-                id="podrido_cinta_kg"
-                label="Podrido cinta (kg)"
-                value={f.podrido_cinta_kg}
-                onChange={update("podrido_cinta_kg")}
-                warning="Estimado"
-                hint="Estimación del encargado, no medible con exactitud"
-              />
-              <NumberField
-                id="reciclado_z1_kg"
-                label="Reciclado malla Z1 (kg)"
-                value={f.reciclado_z1_kg}
-                onChange={update("reciclado_z1_kg")}
-              />
-              <NumberField
-                id="reciclado_z2_kg"
-                label="Reciclado malla Z2 (kg)"
-                value={f.reciclado_z2_kg}
-                onChange={update("reciclado_z2_kg")}
               />
             </div>
           </Card>
@@ -287,34 +309,43 @@ const DSJCalculator = () => {
         {/* Results */}
         <aside className="lg:col-span-2 lg:sticky lg:top-6 self-start space-y-4">
           <ResultCard
-            label="Producción resumen"
+            label="Producción real"
             value={fmt(calc.produccion_real)}
             unit="kg"
-            sub="Calibrador − Mujeres"
+            sub="Calibrador + Industria − Mujeres − Z1 − Z2"
             tone="primary"
             icon={<Package className="h-5 w-5" />}
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
             <ResultCard
+              label="Palets ajustados"
+              value={fmt(calc.palets_ajustados)}
+              unit="kg"
+              sub="Alta − Inv. día anterior"
+            />
+            <ResultCard
               label="Diferencia bruta"
               value={fmt(calc.diferencia_bruta)}
               unit="kg"
-              sub={`${fmtPct(calc.pct_bruta)} sobre producción resumen`}
+              sub={`${fmtPct(calc.pct_bruta)} sobre producción real`}
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
             <ResultCard
-              label="Total mermas"
+              label="Mermas totales"
               value={fmt(calc.mermas_total)}
               unit="kg"
-              sub="Podrido + reciclados"
+              sub="Podrido calibrador + manual"
             />
           </div>
 
           <ResultCard
-            label="Diferencia justificada por podrido y merma natural"
+            label="DSJ (Diferencia Sin Justificar)"
             value={fmt(calc.dsj)}
             unit="kg"
-            sub={`${fmtPct(calc.pct_dsj)} sobre producción resumen`}
+            sub={`${fmtPct(calc.pct_dsj)} sobre producción real`}
             tone={dsjTone}
             emphasis
             icon={<AlertTriangle className="h-6 w-6" />}
