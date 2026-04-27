@@ -481,6 +481,7 @@ Deno.serve(async (req: Request) => {
 // Estructura real: bloques con "Clase: ... MUJERES" seguidos de filas de detalle
 // y una fila de subtotal por bloque (col sin texto en col[5], valor en col[29] aprox)
 const isTamanosFile = /tamano/i.test(f.filename) || /clase/i.test(f.filename) || /calidad/i.test(f.filename);
+const isTamanosFile = /tamano/i.test(f.filename) || /clase/i.test(f.filename) || /calidad/i.test(f.filename);
 if (wb && isTamanosFile) {
   try {
     for (const sheetName of wb.SheetNames) {
@@ -493,46 +494,41 @@ if (wb && isTamanosFile) {
       for (let r = 0; r < rows.length; r++) {
         const row = rows[r] as unknown[];
 
-        // Detectar inicio de bloque MUJERES
-        // La fila tiene col[5]="Clase:" y col[47]="MUJERES" (u otro índice con MUJERES)
-        const hasMujeres = row.some(cell => /mujeres/i.test(String(cell ?? '')));
-        const hasClaseLabel = /^clase/i.test(norm(row[5]));
-        if (hasClaseLabel && hasMujeres) {
+        // col5: puede ser null o string
+        const col5raw = row[5] ?? '';
+        const col5 = norm(col5raw);
+
+        // Detectar inicio bloque MUJERES: fila con "Clase:" en col5 y "MUJERES" en cualquier celda
+        const hasMujeresInRow = row.some(cell => /mujeres/i.test(String(cell ?? '')));
+        if (/^clase/.test(col5) && hasMujeresInRow) {
           inMujeresBlock = true;
           continue;
         }
 
-        // Si estamos en bloque mujeres, buscar la fila de SUBTOTAL del bloque
-        // Es la fila donde col[5] está vacío/null y col[29] tiene un número > 1000
-        // (los subtotales son siempre > 1000 kg, las filas de detalle < 2000 pero pueden solaparse)
-        // La fila de subtotal NO tiene texto en col[5] y tiene número grande en col[29]
-        if (inMujeresBlock) {
-          const col5 = norm(row[5]);
-          const col29 = toNum(row[29]);
+        if (!inMujeresBlock) continue;
 
-          // Fin del bloque: nueva sección "Clase:" o "Variedad:" o "Total de Calidad:"
-          if (/^(clase|variedad|total)/i.test(col5)) {
-            inMujeresBlock = false;
-            // No hacer continue: esta fila puede ser inicio de otro bloque
-            // (ya se evaluará en siguiente iteración)
-            r--; // retroceder para que se evalúe como posible nuevo bloque
-            continue;
-          }
+        // Fin de bloque: nueva sección con texto significativo en col5
+        // EXCEPTO "tamano" que es la mini-cabecera dentro del bloque → ignorar
+        if (col5 && !/^tamano/.test(col5) && /^(clase|variedad|total)/.test(col5)) {
+          inMujeresBlock = false;
+          r--; // reevaluar esta fila como posible inicio de otro bloque
+          continue;
+        }
 
-          // Fila de subtotal del bloque: col[5] vacío y col[29] es número razonable
-          // La fila de detalle tiene texto en col[5] (nombre del tamaño)
-          // La fila de subtotal tiene col[5] null/vacío
-          if (!col5 && isFinite(col29) && col29 > 100) {
-            mujeresL += col29;
-            inMujeresBlock = false; // un subtotal por bloque, luego ya no sumamos más
-            console.log(`tamaños mujeres subtotal en fila ${r}: ${col29.toFixed(2)} kg`);
-          }
+        // Subtotal del bloque: col5 está vacío (null o '') Y col29 tiene número > 100
+        // Las filas de detalle tienen siempre texto en col5 (nombre del tamaño)
+        const isCol5Empty = col5 === '' || col5raw === null;
+        const col29 = toNum(row[29]);
+        if (isCol5Empty && isFinite(col29) && col29 > 100) {
+          mujeresL += col29;
+          inMujeresBlock = false;
+          console.log(`tamaños mujeres subtotal fila ${r}: ${col29.toFixed(2)} kg`);
         }
       }
 
       if (mujeresL > 0) {
         kgmujereslserver = (kgmujereslserver ?? 0) + mujeresL;
-        sources['kgmujeresl'] = { file: f.filename, sheet: sheetName, note: `subtotales bloques MUJERES col[29]` };
+        sources['kgmujeresl'] = { file: f.filename, sheet: sheetName, note: `subtotales bloques MUJERES col[29] > 100` };
         console.log(`tamaños ${f.filename} ${sheetName} mujeresL=${mujeresL.toFixed(2)}`);
       }
     }
