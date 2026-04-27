@@ -390,6 +390,12 @@ const PartDetail = () => {
                 value={parte.kg_inventario_final}
                 onChange={(v) => updateField("kg_inventario_final", v)}
               />
+              <NumField
+                label={t("part.field.kg_palets_pendientes_anterior")}
+                value={parte.kg_palets_pendientes_anterior}
+                onChange={(v) => updateField("kg_palets_pendientes_anterior", v)}
+                hint={t("part.field.kg_palets_pendientes_anterior.help")}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="invn">{t("part.field.notas_inventario")}</Label>
