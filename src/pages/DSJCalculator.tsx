@@ -287,7 +287,7 @@ const DSJCalculator = () => {
         {/* Results */}
         <aside className="lg:col-span-2 lg:sticky lg:top-6 self-start space-y-4">
           <ResultCard
-            label="Producción real"
+            label="Producción resumen"
             value={fmt(calc.produccion_real)}
             unit="kg"
             sub="Calibrador − Mujeres"
