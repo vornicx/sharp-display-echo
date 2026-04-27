@@ -22,7 +22,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { ExportPartesDialog } from "@/components/ExportPartesDialog";
 import { toast } from "sonner";
-import { Plus, Eye, Loader as Loader2 } from "lucide-react";
+import { Plus, Eye, Loader2 } from "lucide-react";
 
 interface Row {
   id: string;
@@ -177,9 +177,9 @@ const PartesList = () => {
                       <TableCell>
                         <StatusBadge estado={r.estado} />
                       </TableCell>
-                      <TableCell className="text-right font-mono">{fmtKg(c.produccionReal)}</TableCell>
-                      <TableCell className="text-right font-mono">{fmtKg(c.paletsAjustados)}</TableCell>
-                      <TableCell className={`text-right font-mono ${Math.abs(c.realDiff) > c.produccionReal * 0.05 ? "text-destructive" : ""}`}>
+                      <TableCell className="text-right font-mono">{fmtKg(c.produced)}</TableCell>
+                      <TableCell className="text-right font-mono">{fmtKg(c.palets)}</TableCell>
+                      <TableCell className={`text-right font-mono ${Math.abs(c.realDiff) > c.produced * 0.05 ? "text-destructive" : ""}`}>
                         {fmtKg(c.realDiff)}
                       </TableCell>
                       <TableCell className={`text-right font-mono ${Math.abs(c.realDeviationPct) > 5 ? "text-destructive" : "text-success"}`}>

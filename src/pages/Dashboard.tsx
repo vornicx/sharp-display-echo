@@ -23,7 +23,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { KPICard } from "@/components/KPICard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Activity, Boxes, TriangleAlert as AlertTriangle, Percent, TrendingDown, Users, Plus, Loader as Loader2 } from "lucide-react";
+import { Activity, Boxes, AlertTriangle, Percent, TrendingDown, Users, Plus, Loader2 } from "lucide-react";
 
 interface PartRow {
   id: string;
@@ -70,11 +70,8 @@ const Dashboard = () => {
         kg_mujeres_manual: today.kg_mujeres_manual,
         kg_podrido_calibrador_manual: today.kg_podrido_calibrador_manual,
         kg_reciclado_manual: today.kg_reciclado_manual,
-        kg_reciclado_malla_z1: Number(today.resumen_ia?.kg_reciclado_malla_z1 ?? 0),
-        kg_reciclado_malla_z2: Number(today.resumen_ia?.kg_reciclado_malla_z2 ?? 0),
         kg_podrido_manual: today.kg_podrido_manual,
         kg_inventario_final: today.kg_inventario_final,
-        kg_palets_pendientes_anterior: Number(today.resumen_ia?.kg_palets_pendientes_anterior ?? 0),
       })
     : null;
 
@@ -88,16 +85,13 @@ const Dashboard = () => {
         kg_mujeres_manual: p.kg_mujeres_manual,
         kg_podrido_calibrador_manual: p.kg_podrido_calibrador_manual,
         kg_reciclado_manual: p.kg_reciclado_manual,
-        kg_reciclado_malla_z1: Number(p.resumen_ia?.kg_reciclado_malla_z1 ?? 0),
-        kg_reciclado_malla_z2: Number(p.resumen_ia?.kg_reciclado_malla_z2 ?? 0),
         kg_podrido_manual: p.kg_podrido_manual,
         kg_inventario_final: p.kg_inventario_final,
-        kg_palets_pendientes_anterior: Number(p.resumen_ia?.kg_palets_pendientes_anterior ?? 0),
       });
       return {
         date: format(new Date(p.date), "dd/MM", { locale: dl }),
-        produccion: c.produccionReal,
-        palets: c.paletsAjustados,
+        produccion: c.produced,
+        palets: c.palets,
         mermas: c.totalShrinkage,
         sin_justificar: Math.max(0, c.realDiff),
       };
@@ -150,14 +144,14 @@ const Dashboard = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               label={t("dash.kpi.production")}
-              value={fmtKg(todayCascade?.produccionReal)}
+              value={fmtKg(todayCascade?.produced)}
               unit="kg"
               tone="primary"
               icon={<Activity className="h-5 w-5" />}
             />
             <KPICard
               label={t("dash.kpi.palets")}
-              value={fmtKg(todayCascade?.paletsAjustados)}
+              value={fmtKg(todayCascade?.palets)}
               unit="kg"
               tone="info"
               icon={<Boxes className="h-5 w-5" />}
@@ -166,7 +160,7 @@ const Dashboard = () => {
               label={t("dash.kpi.diff.real")}
               value={fmtKg(todayCascade?.realDiff)}
               unit="kg"
-              tone={Math.abs(todayCascade?.realDiff ?? 0) > (todayCascade?.produccionReal ?? 0) * 0.05 ? "destructive" : "success"}
+              tone={Math.abs(todayCascade?.realDiff ?? 0) > (todayCascade?.produced ?? 0) * 0.05 ? "destructive" : "success"}
               icon={<AlertTriangle className="h-5 w-5" />}
             />
             <KPICard
