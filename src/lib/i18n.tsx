@@ -252,6 +252,7 @@ const en: Dict = {
   "part.cascade.minus_podrido_manual": "− Manual rotten",
   "part.cascade.minus_palets": "− Pallets registered",
   "part.cascade.minus_inventario": "− Final inventory",
+  "part.cascade.minus_inventario_neto": "− Net inventory (final − previous day pending)",
   "part.cascade.real_diff": "= Real difference (unaccounted)",
   "part.cascade.gross_diff": "Gross difference (to be justified)",
   "part.cascade.unjustified_diff": "= Unjustified difference",
