@@ -24,7 +24,7 @@ export const ExportPartesDialog = ({ defaultFrom, defaultTo }: Props) => {
   const fetchRange = async (): Promise<ParteExportRow[]> => {
     const { data, error } = await supabase
       .from("partes_diarios")
-      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_reciclado_malla_z1, kg_reciclado_malla_z2, kg_podrido_manual, kg_inventario_final, notas_inventario, notas_generales, resumen_ia")
+      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_reciclado_malla_z1, kg_reciclado_malla_z2, kg_podrido_manual, kg_inventario_final, kg_palets_pendientes_anterior, notas_inventario, notas_generales, resumen_ia")
       .gte("date", from)
       .lte("date", to)
       .order("date", { ascending: true });
