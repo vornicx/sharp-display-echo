@@ -482,11 +482,13 @@ Deno.serve(async (req: Request) => {
 // y una fila de subtotal por bloque (col sin texto en col[5], valor en col[29] aprox)
 const isTamanosFile = /tamano/i.test(f.filename) || /clase/i.test(f.filename) || /calidad/i.test(f.filename);
 const isTamanosFile = /tamano/i.test(f.filename) || /clase/i.test(f.filename) || /calidad/i.test(f.filename);
+const isTamanosFile = /tamano/i.test(f.filename) || /clase/i.test(f.filename) || /calidad/i.test(f.filename);
 if (wb && isTamanosFile) {
   try {
     for (const sheetName of wb.SheetNames) {
       const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: null });
+      // RAW: defval undefined para distinguir null real de '' real
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false });
 
       let mujeresL = 0;
       let inMujeresBlock = false;
@@ -494,42 +496,41 @@ if (wb && isTamanosFile) {
       for (let r = 0; r < rows.length; r++) {
         const row = rows[r] as unknown[];
 
-        // col5: puede ser null o string
-        const col5raw = row[5] ?? '';
-        const col5 = norm(col5raw);
+        // ¿Alguna celda de esta fila contiene "MUJERES"?
+        const rowHasMujeres = row.some(c => /mujeres/i.test(String(c ?? '')));
 
-        // Detectar inicio bloque MUJERES: fila con "Clase:" en col5 y "MUJERES" en cualquier celda
-        const hasMujeresInRow = row.some(cell => /mujeres/i.test(String(cell ?? '')));
-        if (/^clase/.test(col5) && hasMujeresInRow) {
+        // Inicio de bloque: fila con "Clase:" en col[5] y "MUJERES" en col[47] (u otra)
+        if (/^clase/i.test(String(row[5] ?? '')) && rowHasMujeres) {
           inMujeresBlock = true;
           continue;
         }
 
         if (!inMujeresBlock) continue;
 
-        // Fin de bloque: nueva sección con texto significativo en col5
-        // EXCEPTO "tamano" que es la mini-cabecera dentro del bloque → ignorar
-        if (col5 && !/^tamano/.test(col5) && /^(clase|variedad|total)/.test(col5)) {
+        const col5str = String(row[5] ?? '').trim(); // '' si vacío o undefined/null
+
+        // Fin de bloque: col5 tiene texto que NO sea "Tamaño" ni un tamaño "(NN)..."
+        // Solo cerramos si empieza por: clase, variedad, total, cantidad
+        if (col5str && !/^tama[nñ]/i.test(col5str) && /^(clase|variedad|total|cantidad)/i.test(col5str)) {
           inMujeresBlock = false;
-          r--; // reevaluar esta fila como posible inicio de otro bloque
+          r--;
           continue;
         }
 
-        // Subtotal del bloque: col5 está vacío (null o '') Y col29 tiene número > 100
-        // Las filas de detalle tienen siempre texto en col5 (nombre del tamaño)
-        const isCol5Empty = col5 === '' || col5raw === null;
-        const col29 = toNum(row[29]);
-        if (isCol5Empty && isFinite(col29) && col29 > 100) {
+        // Subtotal: col5 está vacío Y col[29] es número
+        // Las filas de detalle siempre tienen texto en col5 ("(01) CITRICA", "(02) 9/130"...)
+        const col29 = Number(row[29] ?? NaN);
+        if (col5str === '' && isFinite(col29) && col29 > 100) {
           mujeresL += col29;
           inMujeresBlock = false;
-          console.log(`tamaños mujeres subtotal fila ${r}: ${col29.toFixed(2)} kg`);
+          console.log(`[mujeres] subtotal fila ${r}: ${col29.toFixed(2)} kg`);
         }
       }
 
       if (mujeresL > 0) {
         kgmujereslserver = (kgmujereslserver ?? 0) + mujeresL;
-        sources['kgmujeresl'] = { file: f.filename, sheet: sheetName, note: `subtotales bloques MUJERES col[29] > 100` };
-        console.log(`tamaños ${f.filename} ${sheetName} mujeresL=${mujeresL.toFixed(2)}`);
+        sources['kgmujeresl'] = { file: f.filename, sheet: sheetName, note: `bloques MUJERES subtotal col[29]` };
+        console.log(`[mujeres] total=${mujeresL.toFixed(2)} kg de ${f.filename}`);
       }
     }
   } catch (err) { console.error('tamaños parse error', err); }
