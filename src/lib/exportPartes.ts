@@ -15,6 +15,7 @@ export interface ParteExportRow {
   kg_reciclado_malla_z2: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
+  kg_palets_pendientes_anterior?: number;
   notas_inventario: string | null;
   notas_generales: string | null;
   resumen_ia: any;
