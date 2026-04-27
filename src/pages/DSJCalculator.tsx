@@ -256,7 +256,7 @@ const DSJCalculator = () => {
               />
               <NumberField
                 id="podrido_manual_kg"
-                label="Podrido manual — volcador (kg)"
+                label="Podrido manual bolsa basura (kg)"
                 value={f.podrido_manual_kg}
                 onChange={update("podrido_manual_kg")}
               />
