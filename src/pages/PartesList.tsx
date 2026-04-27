@@ -57,7 +57,7 @@ const PartesList = () => {
     setLoading(true);
     let query = supabase
       .from("partes_diarios")
-      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_reciclado_malla_z1, kg_reciclado_malla_z2, kg_podrido_manual, kg_inventario_final, resumen_ia")
+      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_reciclado_malla_z1, kg_reciclado_malla_z2, kg_podrido_manual, kg_inventario_final, kg_palets_pendientes_anterior, resumen_ia")
       .order("date", { ascending: false });
     if (estadoFilter !== "all") query = query.eq("estado", estadoFilter as any);
     const { data, error } = await query;
