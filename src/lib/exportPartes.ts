@@ -135,26 +135,26 @@ export function exportToPDF(partes: ParteExportRow[], from: string, to: string) 
   // Tabla resumen
   const summary = partes.map(buildSummaryRow);
   const head = [[
-    "Fecha", "Estado", "Producción", "+Industria", "−Mujeres L",
+    "Fecha", "Estado", "Resumen Calibrador", "+Industria punta", "−Mujeres L",
     "−Palets", "−Inventario", "−Podrido C.", "−Recic. Z1", "−Recic. Z2",
-    "−Podrido M.", "Dif. bruta", "Merma", "DSJ", "% DSJ",
+    "−Podrido manual b.b.", "Dif. bruta", "Merma", "Dif. just. p./m.n.", "% Dif. just.",
   ]];
   const body = summary.map((r) => [
     r.Fecha,
     r.Estado,
-    r["Producción total (kg)"].toLocaleString("es-ES"),
-    r["Industria/Cítricos manual (kg)"].toLocaleString("es-ES"),
+    r["Resumen Calibrador (kg)"].toLocaleString("es-ES"),
+    r["Industria de la punta (kg)"].toLocaleString("es-ES"),
     r["Mujeres L (kg)"].toLocaleString("es-ES"),
     r["Palets alta (kg)"].toLocaleString("es-ES"),
     r["Inventario final (kg)"].toLocaleString("es-ES"),
     r["Podrido calibrador (kg)"].toLocaleString("es-ES"),
     r["Reciclado malla Z1 (kg)"].toLocaleString("es-ES"),
     r["Reciclado malla Z2 (kg)"].toLocaleString("es-ES"),
-    r["Podrido manual (kg)"].toLocaleString("es-ES"),
+    r["Podrido manual bolsa basura (kg)"].toLocaleString("es-ES"),
     r["Diferencia bruta (kg)"].toLocaleString("es-ES"),
     r["Merma total (kg)"].toLocaleString("es-ES"),
-    r["Diferencia sin justificar (kg)"].toLocaleString("es-ES"),
-    `${r["% DSJ"].toFixed(2)}%`,
+    r["Dif. justificada por podrido y merma natural (kg)"].toLocaleString("es-ES"),
+    `${r["% Dif. justificada"].toFixed(2)}%`,
   ]);
 
   autoTable(doc, {
