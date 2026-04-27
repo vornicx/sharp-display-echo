@@ -213,7 +213,7 @@ const DSJCalculator = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumberField
                 id="produccion_calibrador_kg"
-                label="Producción calibrador (kg)"
+                label="Resumen Calibrador (kg)"
                 value={f.produccion_calibrador_kg}
                 onChange={update("produccion_calibrador_kg")}
                 hint="Peso total reportado por el calibrador"
