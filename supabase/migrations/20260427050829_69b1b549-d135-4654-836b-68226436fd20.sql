@@ -1,0 +1,1 @@
+ALTER TABLE public.partes_diarios ADD COLUMN IF NOT EXISTS kg_palets_pendientes_anterior numeric NOT NULL DEFAULT 0;
