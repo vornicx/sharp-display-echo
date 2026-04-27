@@ -49,6 +49,7 @@ function buildSummaryRow(p: ParteExportRow) {
     "Mujeres L (kg)": num(Number(p.resumen_ia?.kg_mujeres_l ?? p.kg_mujeres_manual ?? 0)),
     "Palets alta (kg)": num(c.palets),
     "Inventario final (kg)": num(p.kg_inventario_final),
+    "Palets pendientes día ant. (kg)": num(p.kg_palets_pendientes_anterior ?? 0),
     "Podrido calibrador (kg)": num(Number(p.resumen_ia?.kg_podrido_server ?? p.kg_podrido_calibrador_manual ?? 0)),
     "Reciclado malla Z1 (kg)": num(p.kg_reciclado_malla_z1),
     "Reciclado malla Z2 (kg)": num(p.kg_reciclado_malla_z2),
