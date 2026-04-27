@@ -182,7 +182,7 @@ export function exportToPDF(partes: ParteExportRow[], from: string, to: string) 
         num(s.value).toLocaleString("es-ES"),
         num(s.running).toLocaleString("es-ES"),
       ]).concat([[
-        "= Diferencia sin justificar", "=",
+        "= Dif. justificada por podrido y merma natural", "=",
         num(c.unjustifiedDiff).toLocaleString("es-ES"),
         `${num(c.realDeviationPct).toFixed(2)}%`,
       ]]),
