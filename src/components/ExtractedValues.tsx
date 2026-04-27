@@ -74,6 +74,12 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
       hint: "Introducido en la pestaña Manual",
     },
     {
+      label: "Palets sin alta del día anterior (−)",
+      value: Number(manual.kg_palets_pendientes_anterior ?? 0),
+      origin: "manual",
+      hint: "Se RESTA al inventario final para no contarlos dos veces",
+    },
+    {
       label: "Podrido calibrador",
       value: Number(r.kg_podrido_calibrador ?? 0),
       origin: "extracted",
