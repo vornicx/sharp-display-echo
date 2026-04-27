@@ -271,6 +271,7 @@ const PartDetail = () => {
             kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,
             kg_podrido_manual: parte.kg_podrido_manual,
             kg_inventario_final: parte.kg_inventario_final,
+            kg_palets_pendientes_anterior: parte.kg_palets_pendientes_anterior,
           }}
         />
       </Card>
