@@ -190,7 +190,7 @@ const DSJCalculator = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">Calculadora</span>
           </div>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-foreground">
-            Diferencia sin justificar (DSJ)
+            Diferencia justificada por podrido y merma natural
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Cuadre diario de producción de la cooperativa citrícola
