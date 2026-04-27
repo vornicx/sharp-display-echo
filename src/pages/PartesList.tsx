@@ -35,6 +35,7 @@ interface Row {
   kg_reciclado_malla_z2: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
+  kg_palets_pendientes_anterior: number;
   resumen_ia: any;
 }
 
@@ -56,7 +57,7 @@ const PartesList = () => {
     setLoading(true);
     let query = supabase
       .from("partes_diarios")
-      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_reciclado_malla_z1, kg_reciclado_malla_z2, kg_podrido_manual, kg_inventario_final, resumen_ia")
+      .select("id, date, estado, kg_mujeres_manual, kg_podrido_calibrador_manual, kg_reciclado_manual, kg_reciclado_malla_z1, kg_reciclado_malla_z2, kg_podrido_manual, kg_inventario_final, kg_palets_pendientes_anterior, resumen_ia")
       .order("date", { ascending: false });
     if (estadoFilter !== "all") query = query.eq("estado", estadoFilter as any);
     const { data, error } = await query;
@@ -166,6 +167,7 @@ const PartesList = () => {
                     kg_reciclado_malla_z2: r.kg_reciclado_malla_z2,
                     kg_podrido_manual: r.kg_podrido_manual,
                     kg_inventario_final: r.kg_inventario_final,
+                    kg_palets_pendientes_anterior: r.kg_palets_pendientes_anterior,
                   });
                   return (
                     <TableRow key={r.id}>

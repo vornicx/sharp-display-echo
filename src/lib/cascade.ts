@@ -7,7 +7,7 @@
  *      = PRODUCCIÓN AJUSTADA
  *   3. − Mujeres (L) — clase L del informe de tamaños, dato duplicado
  *   4. − Palets dados de alta
- *   5. − Inventario final
+ *   5. − Inventario final NETO (= inventario final − palets sin alta del día anterior)
  *      = DIFERENCIA BRUTA
  *   6. − Podrido calibrador
  *   7. − Reciclado malla Z1
@@ -31,6 +31,7 @@ export interface CascadeInputs {
   kg_reciclado_malla_z2?: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
+  kg_palets_pendientes_anterior?: number; // Palets sin dar de alta del día anterior — se RESTA al inventario
 }
 
 export interface CascadeOutput {
@@ -48,7 +49,9 @@ export interface CascadeOutput {
 export function computeCascade(i: CascadeInputs): CascadeOutput {
   const produced = Number(i.kg_production_total) || 0;
   const palets = Number(i.kg_palets_alta) || 0;
-  const inv = Number(i.kg_inventario_final) || 0;
+  const invRaw = Number(i.kg_inventario_final) || 0;
+  const pendAnt = Number(i.kg_palets_pendientes_anterior) || 0;
+  const inv = invRaw - pendAnt; // inventario neto = final − pendientes del día anterior
   const mL = Number(i.kg_mujeres_manual) || 0;
   const pc = Number(i.kg_podrido_calibrador_manual) || 0;
   const industria = Number(i.kg_reciclado_manual) || 0;
@@ -61,7 +64,7 @@ export function computeCascade(i: CascadeInputs): CascadeOutput {
     { key: "industria",          labelKey: "part.cascade.plus_industria",          value: industria, isMinus: false, running: 0 },
     { key: "mujeres_l",          labelKey: "part.cascade.minus_mujeres_l",         value: mL,        isMinus: true,  running: 0 },
     { key: "palets",             labelKey: "part.cascade.minus_palets",            value: palets,    isMinus: true,  running: 0 },
-    { key: "inventario",         labelKey: "part.cascade.minus_inventario",        value: inv,       isMinus: true,  running: 0 },
+    { key: "inventario",         labelKey: "part.cascade.minus_inventario_neto",   value: inv,       isMinus: true,  running: 0 },
     { key: "podrido_calib",      labelKey: "part.cascade.minus_podrido_calib",     value: pc,        isMinus: true,  running: 0 },
     { key: "reciclado_malla_z1", labelKey: "part.cascade.minus_reciclado_malla_z1",value: rz1,       isMinus: true,  running: 0 },
     { key: "reciclado_malla_z2", labelKey: "part.cascade.minus_reciclado_malla_z2",value: rz2,       isMinus: true,  running: 0 },

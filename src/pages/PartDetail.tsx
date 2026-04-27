@@ -39,6 +39,7 @@ interface Parte {
   kg_reciclado_malla_z2: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
+  kg_palets_pendientes_anterior: number;
   notas_inventario: string | null;
   notas_generales: string | null;
   resumen_ia: any;
@@ -102,6 +103,7 @@ const PartDetail = () => {
       kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,
       kg_podrido_manual: parte.kg_podrido_manual,
       kg_inventario_final: parte.kg_inventario_final,
+      kg_palets_pendientes_anterior: parte.kg_palets_pendientes_anterior,
     });
   }, [parte]);
 
@@ -124,6 +126,7 @@ const PartDetail = () => {
         kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,
         kg_podrido_manual: parte.kg_podrido_manual,
         kg_inventario_final: parte.kg_inventario_final,
+        kg_palets_pendientes_anterior: parte.kg_palets_pendientes_anterior,
         notas_inventario: parte.notas_inventario,
         notas_generales: parte.notas_generales,
       })
@@ -268,6 +271,7 @@ const PartDetail = () => {
             kg_reciclado_malla_z2: parte.kg_reciclado_malla_z2,
             kg_podrido_manual: parte.kg_podrido_manual,
             kg_inventario_final: parte.kg_inventario_final,
+            kg_palets_pendientes_anterior: parte.kg_palets_pendientes_anterior,
           }}
         />
       </Card>
@@ -386,6 +390,12 @@ const PartDetail = () => {
                 value={parte.kg_inventario_final}
                 onChange={(v) => updateField("kg_inventario_final", v)}
               />
+              <NumField
+                label={t("part.field.kg_palets_pendientes_anterior")}
+                value={parte.kg_palets_pendientes_anterior}
+                onChange={(v) => updateField("kg_palets_pendientes_anterior", v)}
+                hint={t("part.field.kg_palets_pendientes_anterior.help")}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="invn">{t("part.field.notas_inventario")}</Label>
@@ -476,7 +486,7 @@ const PartDetail = () => {
   );
 };
 
-const NumField = ({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) => (
+const NumField = ({ label, value, onChange, hint }: { label: string; value: number; onChange: (n: number) => void; hint?: string }) => (
   <div className="space-y-2">
     <Label>{label}</Label>
     <div className="relative">
@@ -490,6 +500,7 @@ const NumField = ({ label, value, onChange }: { label: string; value: number; on
       />
       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">kg</span>
     </div>
+    {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
   </div>
 );
 

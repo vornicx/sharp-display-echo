@@ -280,6 +280,7 @@ export type Database = {
           id: string
           kg_inventario_final: number
           kg_mujeres_manual: number
+          kg_palets_pendientes_anterior: number
           kg_podrido_calibrador_manual: number
           kg_podrido_manual: number
           kg_reciclado_malla_z1: number
@@ -298,6 +299,7 @@ export type Database = {
           id?: string
           kg_inventario_final?: number
           kg_mujeres_manual?: number
+          kg_palets_pendientes_anterior?: number
           kg_podrido_calibrador_manual?: number
           kg_podrido_manual?: number
           kg_reciclado_malla_z1?: number
@@ -316,6 +318,7 @@ export type Database = {
           id?: string
           kg_inventario_final?: number
           kg_mujeres_manual?: number
+          kg_palets_pendientes_anterior?: number
           kg_podrido_calibrador_manual?: number
           kg_podrido_manual?: number
           kg_reciclado_malla_z1?: number

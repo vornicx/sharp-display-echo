@@ -25,6 +25,7 @@ interface Props {
     kg_reciclado_malla_z2: number;
     kg_podrido_manual: number;
     kg_inventario_final: number;
+    kg_palets_pendientes_anterior?: number;
   };
 }
 
@@ -71,6 +72,12 @@ export const ExtractedValues = ({ resumenIa, manual }: Props) => {
       value: manual.kg_inventario_final,
       origin: "manual",
       hint: "Introducido en la pestaña Manual",
+    },
+    {
+      label: "Palets sin alta del día anterior (−)",
+      value: Number(manual.kg_palets_pendientes_anterior ?? 0),
+      origin: "manual",
+      hint: "Se RESTA al inventario final para no contarlos dos veces",
     },
     {
       label: "Podrido calibrador",

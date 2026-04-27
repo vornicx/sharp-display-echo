@@ -15,6 +15,7 @@ export interface ParteExportRow {
   kg_reciclado_malla_z2: number;
   kg_podrido_manual: number;
   kg_inventario_final: number;
+  kg_palets_pendientes_anterior?: number;
   notas_inventario: string | null;
   notas_generales: string | null;
   resumen_ia: any;
@@ -33,6 +34,7 @@ function buildCascadeFor(p: ParteExportRow) {
     kg_reciclado_malla_z2: p.kg_reciclado_malla_z2,
     kg_podrido_manual: p.kg_podrido_manual,
     kg_inventario_final: p.kg_inventario_final,
+    kg_palets_pendientes_anterior: p.kg_palets_pendientes_anterior ?? 0,
   });
 }
 
@@ -47,6 +49,7 @@ function buildSummaryRow(p: ParteExportRow) {
     "Mujeres L (kg)": num(Number(p.resumen_ia?.kg_mujeres_l ?? p.kg_mujeres_manual ?? 0)),
     "Palets alta (kg)": num(c.palets),
     "Inventario final (kg)": num(p.kg_inventario_final),
+    "Palets pendientes día ant. (kg)": num(p.kg_palets_pendientes_anterior ?? 0),
     "Podrido calibrador (kg)": num(Number(p.resumen_ia?.kg_podrido_server ?? p.kg_podrido_calibrador_manual ?? 0)),
     "Reciclado malla Z1 (kg)": num(p.kg_reciclado_malla_z1),
     "Reciclado malla Z2 (kg)": num(p.kg_reciclado_malla_z2),
