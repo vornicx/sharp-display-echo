@@ -167,6 +167,7 @@ const PartesList = () => {
                     kg_reciclado_malla_z2: r.kg_reciclado_malla_z2,
                     kg_podrido_manual: r.kg_podrido_manual,
                     kg_inventario_final: r.kg_inventario_final,
+                    kg_palets_pendientes_anterior: r.kg_palets_pendientes_anterior,
                   });
                   return (
                     <TableRow key={r.id}>
